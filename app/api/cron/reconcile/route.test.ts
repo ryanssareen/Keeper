@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // quota-spending call (validate-before-spend, R24).
 vi.mock("@/lib/scheduler/select", () => ({ selectDueWatches: vi.fn() }));
 vi.mock("@/lib/scheduler/batch", () => ({ reconcileDueBatch: vi.fn() }));
-vi.mock("@/lib/adapters/aerodatabox", () => ({ fetchFlight: vi.fn() }));
+vi.mock("@/lib/adapters/flight", () => ({ fetchFlight: vi.fn() }));
 vi.mock("@/lib/engine/reconcile", () => ({ reconcileWatch: vi.fn() }));
 vi.mock("@/lib/scheduler/backoff", () => ({ backoffWatch: vi.fn() }));
 vi.mock("@/lib/push/dispatch", () => ({ dispatchOutbox: vi.fn() }));

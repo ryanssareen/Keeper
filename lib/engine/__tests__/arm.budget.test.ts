@@ -20,7 +20,7 @@ const sqlTag = vi.fn(() => Promise.resolve(sqlResults.shift() ?? []));
 vi.mock("@/lib/db", () => ({ db: () => sqlTag }));
 
 const fetchFlight = vi.fn();
-vi.mock("@/lib/adapters/aerodatabox", () => ({ fetchFlight: (...a: unknown[]) => fetchFlight(...a) }));
+vi.mock("@/lib/adapters/flight", () => ({ fetchFlight: (...a: unknown[]) => fetchFlight(...a) }));
 
 // Place/geocode/token/writer collaborators are never reached in these tests (we stop at fetchFlight),
 // but they're imported by arm.ts, so stub them to keep the module graph self-contained.

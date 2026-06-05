@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
-import { fetchFlight } from "@/lib/adapters/aerodatabox";
+import { fetchFlight } from "@/lib/adapters/flight";
 import { geocodeAirport, resolvePlace } from "@/lib/adapters/osm";
 import { mintToken, hashToken } from "@/lib/security/capability";
 import { withinWatchCap, budgetOk } from "@/lib/security/ratelimit";

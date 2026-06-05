@@ -10,7 +10,7 @@ import type { AdapterResult } from "@/lib/adapters/result";
 // sets the next result. parseFlightStatus stays the real, separately-tested mapper.
 // ---------------------------------------------------------------------------------------------
 let nextFetchResult: AdapterResult<FlightArrival> = { kind: "not_found" };
-vi.mock("@/lib/adapters/aerodatabox", () => ({
+vi.mock("@/lib/adapters/flight", () => ({
   fetchFlight: vi.fn(async (): Promise<AdapterResult<FlightArrival>> => nextFetchResult),
 }));
 

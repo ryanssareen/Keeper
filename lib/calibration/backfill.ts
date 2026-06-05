@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { fetchFlight } from "@/lib/adapters/aerodatabox";
+import { fetchFlight } from "@/lib/adapters/flight";
 import { backfillActual } from "@/lib/calibration/writer";
 import { ENGINE } from "@/lib/engine/constants";
 import type { FlightArrival } from "@/lib/engine/types";
