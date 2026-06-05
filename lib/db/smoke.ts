@@ -19,7 +19,7 @@ async function main() {
         (${id}, 'smoke-device', 'smoke-hash', 'AA123', '2026-12-20',
          '2026-12-20 20:00:00', 'Europe/Madrid', '2026-12-20T19:00:00Z', 'Test Place',
          true, 0, 'default', 35,
-         30, 'mapbox', true, 'OK')`;
+         30, 'osrm', true, 'OK')`;
 
     await sql`
       INSERT INTO prediction_snapshots

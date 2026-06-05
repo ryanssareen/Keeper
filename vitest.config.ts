@@ -10,5 +10,6 @@ export default defineConfig({
     include: ["lib/**/*.test.ts", "app/**/*.test.ts"],
     setupFiles: ["./vitest.setup.ts"],
     globals: true,
+    testTimeout: 30000, // DB-integration tests hit a remote Supabase region (round-trip latency)
   },
 });

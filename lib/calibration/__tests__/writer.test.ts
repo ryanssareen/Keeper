@@ -28,7 +28,7 @@ describe.skipIf(!hasDb)("calibration writer (integration)", () => {
       VALUES
         (${id}, ${id}, 'h', 'AA1', '2026-12-20', ${airport},
          '2026-12-20 20:00:00', 'Europe/Madrid', '2026-12-20T19:00:00Z', 'P', true,
-         0, 'default', 35, 30, 'mapbox', true, 'OK')`;
+         0, 'default', 35, 30, 'osrm', true, 'OK')`;
     await sql`INSERT INTO calibration (watch_id) VALUES (${id})`;
     return id;
   }

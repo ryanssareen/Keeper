@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS watches (
   margin_source       TEXT NOT NULL CHECK (margin_source IN ('user','default')),
   egress_minutes      INTEGER NOT NULL,
   transit_minutes     INTEGER NOT NULL,
-  transit_source      TEXT NOT NULL CHECK (transit_source IN ('mapbox','manual_buffer')),
+  transit_source      TEXT NOT NULL CHECK (transit_source IN ('osrm','manual_buffer')),
   reschedulable       BOOLEAN NOT NULL,
   contact             TEXT,
   state               TEXT NOT NULL,                    -- state-machine state

@@ -48,7 +48,7 @@ export interface PlaceResolution {
   /** Geocode succeeded with adequate confidence — gates "thesis-exercising". */
   placeResolved: boolean;
   transitMinutes: number;
-  transitSource: "mapbox" | "manual_buffer";
+  transitSource: "osrm" | "manual_buffer";
   reason: "ok" | "geocode_miss" | "ambiguous" | "unroutable";
 }
 
