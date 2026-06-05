@@ -50,22 +50,35 @@ export function step(input: StateInput): StateOutput {
     return { next: "CANCELLED", fired: current === "CANCELLED" ? null : "CANCELLED", recoveryProgress: 0 };
   }
 
-  // 2. Stale feed — global; never asserts a miss from missing data.
+  // 2. Flight on the ground — its airborne phase is over and the actual arrival is known, so the
+  //    watch seals for outcome capture (terminal). U9 backfills the actual arrival + self-report into
+  //    the calibration row on its own path; the engine's job here is only to stop polling. Like
+  //    cancellation, `flightLanded` is derived ONLY from a fresh fetch (the stale branch forces it
+  //    false), so this never seals from a stale feed despite preceding the stale rule. Fires nothing:
+  //    an actionable catch fires earlier, en route, while lead time still exists — there is none left
+  //    at touchdown, and there is no "landed" notification kind.
+  if (flightLanded) {
+    return { next: "LANDED_CAPTURE", fired: null, recoveryProgress: 0 };
+  }
+
+  // 3. Stale feed — global; never asserts a miss from missing data.
   if (feedStale) {
     return { next: "DEGRADED", fired: current === "DEGRADED" ? null : "CANNOT_CONFIRM", recoveryProgress: 0 };
   }
 
-  // 3. No usable prediction — can't confirm.
+  // 4. No usable prediction — can't confirm.
   if (verdict === "indeterminate") {
     return { next: "DEGRADED", fired: current === "DEGRADED" ? null : "CANNOT_CONFIRM", recoveryProgress: 0 };
   }
 
-  // 4. Commitment time passed while still en route (fresh data) — definite miss, terminal.
+  // 5. Commitment time passed while still en route (fresh data) — definite miss, terminal. The
+  //    `!flightLanded` guard is now implied by rule 2 (a landed flight already returned), but kept
+  //    explicit so the rule stays self-contained.
   if (commitmentPassed && !flightLanded) {
     return { next: "DEFINITE_MISS", fired: "DEFINITE_MISS", recoveryProgress: 0 };
   }
 
-  // 5/6. Miss.
+  // 6/7. Miss.
   const deficit = slackMinutes !== null && slackMinutes < 0 ? -slackMinutes : 0;
   if (verdict === "miss") {
     if (deficit >= ENGINE.antiFlapDeficitMinutes) {
@@ -74,7 +87,7 @@ export function step(input: StateInput): StateOutput {
     return { next: "AT_RISK", fired: null, recoveryProgress: 0 }; // borderline; anti-flap holds
   }
 
-  // 7/8/9. Make while in a miss/recovered state — recovery requires sustained slack (dwell).
+  // 8/9/10. Make while in a miss/recovered state — recovery requires sustained slack (dwell).
   if (current === "MISS_PREDICTED" || current === "RECOVERED") {
     const recovered = slackMinutes !== null && slackMinutes >= ENGINE.recoveryBandMinutes;
     if (recovered) {
@@ -87,7 +100,7 @@ export function step(input: StateInput): StateOutput {
     return { next: current, fired: null, recoveryProgress: 0 }; // below band — reset dwell
   }
 
-  // 10/11. Make while in OK/AT_RISK.
+  // 11/12. Make while in OK/AT_RISK.
   if (slackMinutes !== null && slackMinutes >= ENGINE.okAtRiskBandMinutes) {
     return { next: "OK", fired: null, recoveryProgress: 0 };
   }

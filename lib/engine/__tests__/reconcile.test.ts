@@ -159,6 +159,40 @@ describe("planReconcile: terminal edges (AE3)", () => {
     expect(plan.terminal).toBe(true);
     expect(plan.fired).toMatchObject({ kind: "DEFINITE_MISS" });
   });
+
+  it("a flight that lands mid-watch on a make → LANDED_CAPTURE terminal, polling stops", () => {
+    // Regression: with the watch still OK and flightLanded=true, pollMinutes() returned the in-window
+    // cadence (2 min) forever — the watch never sealed. Landing must terminate: terminal=true →
+    // nextPollMinutes=null → the row drops out of watches_due. U9 backfills the actual separately.
+    const plan = planReconcile(
+      baseWatch({ state: "OK" }),
+      fresh({ status: "landed", actualUtc: "2026-06-05T17:00:00Z", predictedUtc: "2026-06-05T17:00:00Z", revision: "rLANDED" }),
+      NOW,
+    );
+    expect(plan.kind).toBe("apply");
+    if (plan.kind !== "apply") return;
+    expect(plan.state).toBe("LANDED_CAPTURE");
+    expect(plan.terminal).toBe(true);
+    expect(plan.nextPollMinutes).toBeNull();
+    expect(plan.fired).toBeNull();
+    expect(plan.snapshot).toMatchObject({ resultingState: "LANDED_CAPTURE", verdict: "make", firedTransition: null });
+  });
+
+  it("a flight that lands INTO a miss still seals (no endless MISS_PREDICTED polling, no late CATCH)", () => {
+    // predicted 19:15 → projected 20:20 → slack -20 (a miss), but the aircraft is on the ground: seal,
+    // do not fire a touchdown-time CATCH. Without the landing rule this stays MISS_PREDICTED and re-polls.
+    const plan = planReconcile(
+      baseWatch({ state: "AT_RISK" }),
+      fresh({ status: "landed", actualUtc: "2026-06-05T19:15:00Z", predictedUtc: "2026-06-05T19:15:00Z", revision: "rLM" }),
+      NOW,
+    );
+    expect(plan.kind).toBe("apply");
+    if (plan.kind !== "apply") return;
+    expect(plan.state).toBe("LANDED_CAPTURE");
+    expect(plan.terminal).toBe(true);
+    expect(plan.nextPollMinutes).toBeNull();
+    expect(plan.fired).toBeNull();
+  });
 });
 
 describe("planReconcile: degraded / honest-failure (AE8, R18)", () => {

@@ -103,10 +103,10 @@ describe("state machine: en-route definite miss + indeterminate + terminal", () 
       fired: "DEFINITE_MISS",
     });
   });
-  it("commitment passed AFTER landing on a make is not a definite miss", () => {
-    expect(step(inp({ commitmentPassed: true, flightLanded: true, verdict: "make", slackMinutes: 90 })).next).not.toBe(
-      "DEFINITE_MISS",
-    );
+  it("commitment passed AFTER landing on a make seals to LANDED_CAPTURE, not a definite miss", () => {
+    const out = step(inp({ commitmentPassed: true, flightLanded: true, verdict: "make", slackMinutes: 90 }));
+    expect(out).toMatchObject({ next: "LANDED_CAPTURE", fired: null });
+    expect(out.next).not.toBe("DEFINITE_MISS");
   });
   it("an indeterminate verdict degrades (can't confirm)", () => {
     expect(step(inp({ verdict: "indeterminate", slackMinutes: null }))).toMatchObject({
@@ -116,5 +116,41 @@ describe("state machine: en-route definite miss + indeterminate + terminal", () 
   });
   it("LANDED_CAPTURE is terminal and silent", () => {
     expect(step(inp({ current: "LANDED_CAPTURE" }))).toMatchObject({ next: "LANDED_CAPTURE", fired: null });
+  });
+});
+
+describe("state machine: landing seals (terminal outcome capture)", () => {
+  // A flight that lands DURING an active watch must reach a terminal state, or reconcile keeps
+  // re-selecting it on the in-window cadence forever (the flightLanded poll-cadence trap).
+  it("a make watch that lands mid-flight seals to LANDED_CAPTURE without firing", () => {
+    expect(step(inp({ current: "OK", flightLanded: true, verdict: "make", slackMinutes: 90 }))).toMatchObject({
+      next: "LANDED_CAPTURE",
+      fired: null,
+      recoveryProgress: 0,
+    });
+  });
+  it("landing seals from AT_RISK too (still no fire at touchdown)", () => {
+    expect(step(inp({ current: "AT_RISK", flightLanded: true, verdict: "make", slackMinutes: 5 }))).toMatchObject({
+      next: "LANDED_CAPTURE",
+      fired: null,
+    });
+  });
+  it("a flight that lands INTO a miss still seals — no late CATCH at touchdown", () => {
+    // Landing wins over the miss rules: the outcome is sealed, and an actionable catch (if any) fired
+    // earlier while en route. Without the landing rule this returns MISS_PREDICTED and polls forever.
+    expect(step(inp({ current: "AT_RISK", flightLanded: true, verdict: "miss", slackMinutes: -30 }))).toMatchObject({
+      next: "LANDED_CAPTURE",
+      fired: null,
+    });
+  });
+  it("landing wins over cancellation? No — a cancelled status still terminates as CANCELLED", () => {
+    // Defensive ordering: rule 1 (cancel) precedes rule 2 (landed). A cancelled flight never landed.
+    expect(step(inp({ flightStatus: "cancelled", flightLanded: true }))).toMatchObject({ next: "CANCELLED" });
+  });
+  it("landing precedes the indeterminate rule — a landed flight with no prediction seals, not degrades", () => {
+    expect(step(inp({ flightLanded: true, verdict: "indeterminate", slackMinutes: null }))).toMatchObject({
+      next: "LANDED_CAPTURE",
+      fired: null,
+    });
   });
 });
