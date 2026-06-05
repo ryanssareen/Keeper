@@ -277,6 +277,40 @@ export async function loadWatchForView(id: string): Promise<LoadWatchResult> {
   };
 }
 
+/** One row in the authenticated dashboard's watch sidebar (newest commitment first, active first). */
+export interface WatchSummary {
+  id: string;
+  flightNumber: string;
+  placeLabel: string;
+  state: WatchState;
+  commitmentInstantUtc: string;
+  commitmentZone: string;
+  terminal: boolean;
+}
+
+/**
+ * Account-scoped list of a user's watches for the multi-watch dashboard sidebar. Ownership IS the
+ * gate here: the WHERE user_id clause means a caller only ever sees their own rows, so the page can
+ * trust any id returned by this loader as authorized (no second per-watch token check needed for the
+ * owner path). Active watches sort before terminal ones, then by soonest commitment.
+ */
+export async function loadWatchesForUser(userId: string): Promise<WatchSummary[]> {
+  const sql = db();
+  const rows = await sql`
+    SELECT id, flight_number, place_label, state, commitment_instant, commitment_zone, terminal
+    FROM watches WHERE user_id = ${userId}
+    ORDER BY terminal ASC, commitment_instant ASC`;
+  return rows.map((r) => ({
+    id: String(r.id),
+    flightNumber: String(r.flight_number),
+    placeLabel: String(r.place_label),
+    state: narrow(r.state, WATCH_STATES, "watches.state"),
+    commitmentInstantUtc: toIso(r.commitment_instant),
+    commitmentZone: String(r.commitment_zone),
+    terminal: Boolean(r.terminal),
+  }));
+}
+
 /** Normalize a driver timestamp (Date | string) to a UTC ISO string for the contract boundary. */
 function toIso(value: unknown): string {
   if (value instanceof Date) return value.toISOString();

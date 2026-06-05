@@ -2,6 +2,7 @@ import { z } from "zod";
 import { armWatch } from "@/lib/engine/arm";
 import { db } from "@/lib/db";
 import { loadAndVerifyWatch } from "@/lib/security/watchGate";
+import { getCurrentUser } from "@/lib/supabase/server";
 
 const ArmBody = z.object({
   deviceId: z.string().min(8).max(128),
@@ -28,7 +29,14 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: "Invalid input.", details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const res = await armWatch(parsed.data, new Date().toISOString());
+  // Account ownership comes from the VERIFIED session, never from the request body — a client can't
+  // claim another user's id. Logged-out arms (push-only, capability-token) pass userId: null.
+  const user = await getCurrentUser();
+
+  const res = await armWatch(
+    { ...parsed.data, userId: user?.id ?? null },
+    new Date().toISOString(),
+  );
   if (!res.ok) return Response.json({ error: res.reason }, { status: 400 });
   return Response.json(res.watch, { status: 201 });
 }

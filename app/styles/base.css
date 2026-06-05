@@ -1,0 +1,70 @@
+/* Keeper — base reset + element defaults */
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; padding: 0; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color: var(--text-body);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "cv01", "ss03";
+}
+
+h1, h2, h3, h4 {
+  color: var(--text-strong);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+  text-wrap: balance;
+}
+
+p { text-wrap: pretty; }
+
+a { color: inherit; text-decoration: none; }
+
+img, svg { display: block; max-width: 100%; }
+
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: none; }
+
+::selection { background: var(--zinc-900); color: #fff; }
+
+:focus-visible {
+  outline: 2px solid var(--zinc-900);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ---- Shared layout helpers ---- */
+.k-container { width: 100%; max-width: var(--container); margin-inline: auto; padding-inline: var(--space-6); }
+.k-narrow { max-width: var(--container-narrow); margin-inline: auto; }
+
+/* ---- System label: small uppercase tracked mono ---- */
+.k-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: var(--weight-medium);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--text-faint);
+}
+
+/* ---- Eyebrow with leading dot ---- */
+.k-eyebrow {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--text-muted);
+}
+.k-eyebrow::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--emerald-500);
+}

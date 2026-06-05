@@ -20,6 +20,12 @@ export interface ArmRequest {
   reschedulable: boolean;
   marginMinutes?: number;
   contact?: string | null;
+  /**
+   * Owning account (Supabase auth.users.id), or null when armed logged-out. NEVER taken from client
+   * input — the route resolves it from the verified session — so a caller can't claim another user's
+   * id. Recorded on the watch so the dashboard can list "my watches".
+   */
+  userId?: string | null;
 }
 
 export interface ArmedWatch {
@@ -155,14 +161,14 @@ export async function armWatch(req: ArmRequest, nowUtc: string): Promise<ArmResu
     await sql.begin(async (tx) => {
       await tx`
         INSERT INTO watches
-          (id, device_id, owner_token_hash, flight_number, flight_date, arrival_airport,
+          (id, device_id, user_id, owner_token_hash, flight_number, flight_date, arrival_airport,
            commitment_local, commitment_zone, commitment_instant, place_label, place_lat, place_lng,
            place_resolved, margin_minutes, margin_source, egress_minutes, transit_minutes,
            transit_source, reschedulable, contact, state, revision, next_poll_at, last_fetched_at,
            terminal)
         VALUES
-          (${id}, ${req.deviceId}, ${tokenHash}, ${req.flightNumber}, ${req.flightDate},
-           ${flight.arrivalAirport}, ${req.commitmentLocal}, ${commitment.ianaZone},
+          (${id}, ${req.deviceId}, ${req.userId ?? null}, ${tokenHash}, ${req.flightNumber},
+           ${req.flightDate}, ${flight.arrivalAirport}, ${req.commitmentLocal}, ${commitment.ianaZone},
            ${valid.commitmentInstantUtc}, ${place.label}, ${place.lat}, ${place.lng},
            ${place.placeResolved}, ${commitment.marginMinutes}, ${marginSource},
            ${ENGINE.egressMinutes}, ${place.transitMinutes}, ${place.transitSource},

@@ -37,6 +37,17 @@ CREATE TABLE IF NOT EXISTS watches (
 -- On Postgres 11+ a NOT NULL column with a constant DEFAULT is a metadata-only fast default (no table rewrite).
 ALTER TABLE watches ADD COLUMN IF NOT EXISTS recovery_progress INTEGER NOT NULL DEFAULT 0;
 
+-- Account ownership (full account integration). A watch MAY belong to a Supabase auth user (their
+-- auth.users.id, stored as text). NULLABLE on purpose: a watch armed from a logged-out device — or
+-- before accounts existed — is still valid and reachable via its capability token; the account
+-- session and the capability token are two independent ownership channels. No cross-schema FK to
+-- auth.users (the app connects through the pooler role, which need not own that grant); ownership is
+-- enforced in the query layer instead.
+ALTER TABLE watches ADD COLUMN IF NOT EXISTS user_id TEXT;
+
+-- Dashboard "my watches" selector: WHERE user_id = $1. Partial index skips the legacy NULL rows.
+CREATE INDEX IF NOT EXISTS watches_user ON watches (user_id) WHERE user_id IS NOT NULL;
+
 -- Idempotent arm: one active watch per device + flight + commitment.
 CREATE UNIQUE INDEX IF NOT EXISTS watches_dedupe_active
   ON watches (device_id, flight_number, flight_date, commitment_instant)

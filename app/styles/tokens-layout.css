@@ -1,0 +1,43 @@
+/* Keeper — spacing, radii, shadows, motion */
+:root {
+  /* Spacing scale */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+  --space-32: 128px;
+
+  /* Radii — soft, generous; cards are rounded-2xl */
+  --radius-sm:  6px;
+  --radius-md:  8px;
+  --radius-lg:  12px;
+  --radius-xl:  16px;
+  --radius-2xl: 20px;
+  --radius-full: 999px;
+
+  /* Shadows — restrained; mostly hairline borders do the work */
+  --shadow-xs: 0 1px 2px rgba(9, 9, 11, 0.04);
+  --shadow-sm: 0 1px 3px rgba(9, 9, 11, 0.06), 0 1px 2px rgba(9, 9, 11, 0.04);
+  --shadow-md: 0 4px 16px -4px rgba(9, 9, 11, 0.08), 0 2px 6px -2px rgba(9, 9, 11, 0.05);
+  --shadow-lg: 0 12px 40px -8px rgba(9, 9, 11, 0.12), 0 4px 12px -4px rgba(9, 9, 11, 0.06);
+  --shadow-ink: 0 8px 30px -8px rgba(9, 9, 11, 0.30);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1); /* @kind other */
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1); /* @kind other */
+  --dur-fast: 120ms; /* @kind other */
+  --dur-base: 200ms; /* @kind other */
+  --dur-slow: 360ms; /* @kind other */
+
+  /* Layout */
+  --container: 1120px;
+  --container-narrow: 720px;
+}

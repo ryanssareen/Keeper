@@ -1,0 +1,58 @@
+/* Keeper — shared site chrome: top nav, brand/logo, footers.
+ * Page-specific layout lives in per-page CSS modules; this file is only the
+ * chrome reused across the marketing + contact surfaces. */
+
+/* ---------- brand / logo ---------- */
+.brand { display: inline-flex; align-items: center; gap: 10px; }
+.brand .wordmark {
+  font-size: 18px; font-weight: 600; letter-spacing: -0.02em; color: var(--text-strong);
+}
+.logo-tile {
+  width: 28px; height: 28px; border-radius: 8px; background: var(--zinc-900);
+  display: grid; place-items: center; box-shadow: var(--shadow-sm);
+}
+
+/* ---------- top nav ---------- */
+.nav {
+  position: sticky; top: 0; z-index: 40;
+  background: color-mix(in srgb, #fff 80%, transparent);
+  backdrop-filter: saturate(180%) blur(16px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-inner { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+.nav-links { display: flex; align-items: center; gap: 4px; }
+.nav-links a {
+  font-size: 14px; color: var(--text-body); padding: 8px 12px; border-radius: 8px;
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+.nav-links a:hover, .nav-links a.active { background: var(--bg-sunken); color: var(--text-strong); }
+.nav-cta { display: flex; align-items: center; gap: 8px; }
+
+/* ---------- full footer (landing) ---------- */
+footer.site { border-top: 1px solid var(--border); padding: 56px 0 40px; }
+.foot-grid { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 32px; }
+.foot-brand p { font-size: 13.5px; color: var(--text-muted); margin-top: 14px; max-width: 26ch; line-height: 1.55; }
+.foot-col h6 {
+  font-size: 12px; font-family: var(--font-mono); text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--text-faint);
+}
+.foot-col a { display: block; font-size: 14px; color: var(--text-body); margin-top: 12px; }
+.foot-col a:hover { color: var(--text-strong); }
+.foot-bottom {
+  margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--hairline);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.foot-bottom p { font-size: 13px; color: var(--text-faint); }
+
+/* ---------- compact footer (features / contact) ---------- */
+footer.site-compact { border-top: 1px solid var(--border); padding: 40px 0; }
+.foot-inner { display: flex; align-items: center; justify-content: space-between; }
+.foot-inner p { font-size: 13px; color: var(--text-faint); }
+.foot-links { display: flex; gap: 20px; }
+.foot-links a { font-size: 13px; color: var(--text-muted); }
+.foot-links a:hover { color: var(--text-strong); }
+
+@media (max-width: 900px) {
+  .nav-links { display: none; }
+  .foot-grid { grid-template-columns: 1fr 1fr; }
+}
