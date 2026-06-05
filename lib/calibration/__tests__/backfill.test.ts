@@ -273,14 +273,14 @@ describe.skipIf(!hasDb)("calibration backfill + self-report (integration)", () =
     expect((await cal(id))[0].self_report_status).toBe("pending"); // untouched
   });
 
-  it("self-report POST for a missing watch is 404", async () => {
+  it("self-report POST for a missing watch is 403 (uniform denial — no existence oracle)", async () => {
     const res = await POST(
       new Request("http://t/api/self-report", {
         method: "POST",
         body: JSON.stringify({ watchId: randomUUID(), token: "x", outcome: "made" }),
       }),
     );
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(403); // a missing watch and a bad token are indistinguishable
   });
 
   it("self-report POST with a malformed body is 400", async () => {

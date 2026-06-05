@@ -210,17 +210,22 @@ describe("urlBase64ToUint8Array", () => {
 
 vi.mock("web-push", async (importActual) => {
   const actual = await importActual<typeof import("web-push")>();
+  // ONE shared fn behind both the default and named exports: dispatch.ts calls it via its default
+  // import, the test configures it via the namespace import. If these were two vi.fn()s, the test's
+  // mockRejectedValueOnce would target a fn dispatch never calls — and the send would silently resolve.
+  const sendNotification = vi.fn();
+  const setVapidDetails = vi.fn();
   return {
     ...actual,
     default: {
       ...(actual as unknown as { default: typeof import("web-push") }).default,
-      setVapidDetails: vi.fn(),
-      sendNotification: vi.fn(),
+      setVapidDetails,
+      sendNotification,
     },
     // Keep the real WebPushError class so `instanceof` checks in dispatch.ts match.
     WebPushError: actual.WebPushError,
-    setVapidDetails: vi.fn(),
-    sendNotification: vi.fn(),
+    setVapidDetails,
+    sendNotification,
   };
 });
 
