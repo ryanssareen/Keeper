@@ -1,13 +1,19 @@
 import { z } from "zod";
+import nodemailer from "nodemailer";
+import type { Transporter } from "nodemailer";
 
 /**
- * POST /api/contact — deliver a contact-form message via Brevo's transactional email API.
+ * POST /api/contact — deliver a contact-form message via Brevo over SMTP (smtp-relay.brevo.com).
  *
- * Cross-cutting protection lives in the proxy: cross-origin POSTs are rejected and this path is
- * IP-rate-limited BEFORE the handler runs, so a flood never reaches Brevo. Here we validate, escape
- * all user content into the HTML body (no injection), and send. The sender must be a verified Brevo
- * sender (BREVO_SENDER_EMAIL); replies go to the submitter via replyTo.
+ * SMTP (not the v3 REST API) so it authenticates with Brevo's SMTP key (xsmtpsib-…). Cross-cutting
+ * protection lives in the proxy: cross-origin POSTs are rejected and this path is IP-rate-limited
+ * BEFORE the handler runs. Here we validate, escape all user content into the HTML body (no
+ * injection), and send. The sender must be a verified Brevo sender (BREVO_SENDER_EMAIL); replies go
+ * to the submitter via replyTo.
+ *
+ * Forced to the Node.js runtime: nodemailer opens a TCP/TLS socket, which the edge runtime can't.
  */
+export const runtime = "nodejs";
 
 const ContactBody = z.object({
   topic: z.string().min(1).max(80),
@@ -18,6 +24,23 @@ const ContactBody = z.object({
 });
 
 const RECIPIENTS = ["ryanssareen@gmail.com", "ryansareen6@gmail.com"];
+
+let cachedTransport: Transporter | null = null;
+
+/** Lazily build the Brevo SMTP transport, or null when no SMTP key is configured. */
+function getTransport(): Transporter | null {
+  if (cachedTransport) return cachedTransport;
+  const pass = process.env.BREVO_SMTP_KEY ?? process.env.BREVO_API_KEY;
+  const user = process.env.BREVO_SMTP_LOGIN ?? process.env.BREVO_SENDER_EMAIL ?? "ryansareen6@gmail.com";
+  if (!pass) return null;
+  cachedTransport = nodemailer.createTransport({
+    host: process.env.BREVO_SMTP_HOST ?? "smtp-relay.brevo.com",
+    port: Number(process.env.BREVO_SMTP_PORT ?? 587),
+    secure: false, // STARTTLS on 587
+    auth: { user, pass },
+  });
+  return cachedTransport;
+}
 
 export async function POST(req: Request): Promise<Response> {
   let body: unknown;
@@ -33,15 +56,14 @@ export async function POST(req: Request): Promise<Response> {
   }
   const { topic, name, email, urgency, message } = parsed.data;
 
-  const apiKey = process.env.BREVO_API_KEY;
-  if (!apiKey) {
-    // Misconfiguration, not user error — don't pretend it sent.
+  const transport = getTransport();
+  if (!transport) {
     return Response.json(
       { error: "Email isn’t configured yet. Please email us directly in the meantime." },
       { status: 503 },
     );
   }
-  const sender = process.env.BREVO_SENDER_EMAIL ?? "ryansareen6@gmail.com";
+  const from = process.env.BREVO_SENDER_EMAIL ?? "ryansareen6@gmail.com";
 
   const subject = `[Keeper] ${topic} — ${urgency}`;
   const html = `
@@ -56,27 +78,17 @@ export async function POST(req: Request): Promise<Response> {
   const text = `New Keeper contact message\n\nTopic: ${topic}\nUrgency: ${urgency}\nName: ${name}\nEmail: ${email}\n\n${message}`;
 
   try {
-    const res = await fetch("https://api.brevo.com/v3/smtp/email", {
-      method: "POST",
-      headers: { "api-key": apiKey, "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({
-        sender: { name: "Keeper Contact", email: sender },
-        to: RECIPIENTS.map((e) => ({ email: e })),
-        replyTo: { email, name },
-        subject,
-        htmlContent: html,
-        textContent: text,
-      }),
+    await transport.sendMail({
+      from: { name: "Keeper Contact", address: from },
+      to: RECIPIENTS,
+      replyTo: { name, address: email },
+      subject,
+      html,
+      text,
     });
-
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      console.error("Brevo send failed:", res.status, detail.slice(0, 300));
-      return Response.json({ error: "Couldn’t send your message — please try again." }, { status: 502 });
-    }
   } catch (e) {
-    console.error("Brevo request error:", e instanceof Error ? e.message : e);
-    return Response.json({ error: "Couldn’t reach our email provider — please try again." }, { status: 502 });
+    console.error("Brevo SMTP send failed:", e instanceof Error ? e.message : e);
+    return Response.json({ error: "Couldn’t send your message — please try again." }, { status: 502 });
   }
 
   return Response.json({ ok: true }, { status: 200 });
