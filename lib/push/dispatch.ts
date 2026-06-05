@@ -195,6 +195,10 @@ export function classifySendError(statusCode: number | undefined): {
 // IO shell — DB + web-push. Kept deliberately thin; the decisions above are all pure.
 // ------------------------------------------------------------------------------------------------
 
+// Cap a single push send so a hung push service can't block the serial dispatch loop (and the cron
+// invocation) indefinitely. A timed-out send throws and is classified as transient (left attempting).
+const SEND_TIMEOUT_MS = 10_000;
+
 let vapidConfigured = false;
 
 /**
@@ -358,7 +362,7 @@ async function sendOne(plan: Extract<SendPlan, { action: "send" }>): Promise<Sen
         keys: { p256dh: plan.subscription.p256dh, auth: plan.subscription.auth },
       },
       JSON.stringify(plan.payload),
-      { TTL: plan.ttlSeconds, urgency: "high" },
+      { TTL: plan.ttlSeconds, urgency: "high", timeout: SEND_TIMEOUT_MS },
     );
     return { delivered: true };
   } catch (err) {

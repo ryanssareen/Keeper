@@ -120,14 +120,16 @@ export async function armWatch(req: ArmRequest, nowUtc: string): Promise<ArmResu
           (id, device_id, owner_token_hash, flight_number, flight_date, arrival_airport,
            commitment_local, commitment_zone, commitment_instant, place_label, place_lat, place_lng,
            place_resolved, margin_minutes, margin_source, egress_minutes, transit_minutes,
-           transit_source, reschedulable, contact, state, revision, next_poll_at, last_fetched_at)
+           transit_source, reschedulable, contact, state, revision, next_poll_at, last_fetched_at,
+           terminal)
         VALUES
           (${id}, ${req.deviceId}, ${tokenHash}, ${req.flightNumber}, ${req.flightDate},
            ${flight.arrivalAirport}, ${req.commitmentLocal}, ${commitment.ianaZone},
            ${valid.commitmentInstantUtc}, ${place.label}, ${place.lat}, ${place.lng},
            ${place.placeResolved}, ${commitment.marginMinutes}, ${marginSource},
            ${ENGINE.egressMinutes}, ${place.transitMinutes}, ${place.transitSource},
-           ${req.reschedulable}, ${req.contact ?? null}, ${state}, ${flight.revision}, now(), ${nowUtc})`;
+           ${req.reschedulable}, ${req.contact ?? null}, ${state}, ${flight.revision},
+           ${landed ? null : nowUtc}, ${nowUtc}, ${landed})`;
       await tx`INSERT INTO calibration (watch_id) VALUES (${id})`;
     });
   } catch (e) {

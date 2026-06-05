@@ -111,7 +111,7 @@ export async function expireStaleSelfReports(): Promise<number> {
     FROM watches w
     WHERE c.watch_id = w.id
       AND c.self_report_status = 'pending'
-      AND w.commitment_instant < now() - (${SELF_REPORT_WINDOW_MINUTES} || ' minutes')::interval
+      AND w.commitment_instant < now() - make_interval(mins => ${SELF_REPORT_WINDOW_MINUTES})
     RETURNING c.watch_id`;
   return rows.count;
 }

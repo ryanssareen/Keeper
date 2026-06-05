@@ -38,11 +38,21 @@ export function isOriginAllowed(
   return allowlist.includes(origin);
 }
 
-/** Best-effort client IP from common proxy headers, falling back to a constant bucket. */
+/**
+ * Client IP for rate-limit keying. Prefer the platform-set `x-real-ip` (Vercel sets it to the true
+ * client IP): `x-forwarded-for` is client-appendable, so its LEFTMOST entry is forgeable and a
+ * spoofed-per-request XFF would land each request in a fresh window and defeat the limit. Fall back
+ * to the RIGHTMOST XFF hop (the one added by the closest trusted proxy), then a constant bucket.
+ */
 function clientIp(req: NextRequest): string {
+  const real = req.headers.get("x-real-ip");
+  if (real) return real.trim();
   const fwd = req.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0]!.trim();
-  return req.headers.get("x-real-ip") ?? "unknown";
+  if (fwd) {
+    const parts = fwd.split(",");
+    return parts[parts.length - 1]!.trim();
+  }
+  return "unknown";
 }
 
 /** Apply the baseline security headers to a response in place, then return it. */

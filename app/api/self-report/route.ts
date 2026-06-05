@@ -38,10 +38,9 @@ export async function POST(req: Request): Promise<Response> {
 
   const sql = db();
   const rows = await sql`SELECT owner_token_hash FROM watches WHERE id = ${watchId}`;
-  if (rows.length === 0) {
-    return Response.json({ error: "Not found." }, { status: 404 });
-  }
-  if (!verifyToken(token, String(rows[0].owner_token_hash))) {
+  // Uniform denial for a missing watch OR a bad token — a distinct 404 would be an existence oracle
+  // (a guesser learns which watch ids are live), matching the dashboard gate's indistinguishable copy.
+  if (rows.length === 0 || !verifyToken(token, String(rows[0].owner_token_hash))) {
     return Response.json({ error: "Forbidden." }, { status: 403 });
   }
 

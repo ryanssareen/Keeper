@@ -102,15 +102,24 @@ export function getArmRateLimiter(): Ratelimit | null {
 export async function checkIpRateLimit(ip: string): Promise<RateLimitOutcome> {
   const limiter = getArmRateLimiter();
 
-  if (!limiter) {
+  // Env-absent OR a transient Upstash failure both apply the same posture: fail-closed in prod (429
+  // beats an unbounded paid surface), dev-bypass locally. Without the catch, an Upstash blip would
+  // throw unhandled in the proxy and 500 every mutating request.
+  const fallback = (): RateLimitOutcome => {
     const devBypass = process.env.NODE_ENV !== "production";
     return { allowed: devBypass, limit: IP_RATE_LIMIT, remaining: devBypass ? IP_RATE_LIMIT : 0 };
-  }
+  };
 
-  const res = await limiter.limit(ip);
-  // `res.limit - res.remaining` is the hit count consumed in this window; route it through the pure
-  // decision so prod and tests share one code path.
-  const currentHits = res.limit - res.remaining;
-  const allowed = res.success && rateLimitDecision(currentHits, res.limit);
-  return { allowed, limit: res.limit, remaining: Math.max(0, res.remaining) };
+  if (!limiter) return fallback();
+
+  try {
+    const res = await limiter.limit(ip);
+    // `res.limit - res.remaining` is the hit count consumed in this window; route it through the pure
+    // decision so prod and tests share one code path.
+    const currentHits = res.limit - res.remaining;
+    const allowed = res.success && rateLimitDecision(currentHits, res.limit);
+    return { allowed, limit: res.limit, remaining: Math.max(0, res.remaining) };
+  } catch {
+    return fallback();
+  }
 }
