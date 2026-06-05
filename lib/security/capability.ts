@@ -1,4 +1,5 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+import { safeStringEqual } from "@/lib/security/compare";
 
 /**
  * Capability-based ownership (R23). A watch is owned by an unguessable token minted at arm and
@@ -17,8 +18,5 @@ export function hashToken(token: string): string {
 
 /** Constant-time check of a presented token against a stored hash. */
 export function verifyToken(presented: string, storedHash: string): boolean {
-  const a = Buffer.from(hashToken(presented), "hex");
-  const b = Buffer.from(storedHash, "hex");
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
+  return safeStringEqual(hashToken(presented), storedHash);
 }

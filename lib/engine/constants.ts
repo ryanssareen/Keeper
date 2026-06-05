@@ -17,4 +17,7 @@ export const ENGINE = {
   pollOutOfWindowMinutes: 15, // far from the commitment — relaxed
   pollDegradedRetryMinutes: 5, // can't confirm — re-check soon
   pollTransientRetryMinutes: 2, // a single failed fetch — retry quickly
+  // Scheduler tick bounds (U7).
+  maxWatchesPerTick: 25, // per-tick work + upstream-call ceiling — bounds spend per authorized call (R24)
+  errorBackoffMinutes: 5, // push an erroring watch this far out so a persistent failure can't hot-loop
 } as const;
