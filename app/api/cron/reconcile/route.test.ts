@@ -8,10 +8,14 @@ vi.mock("@/lib/scheduler/batch", () => ({ reconcileDueBatch: vi.fn() }));
 vi.mock("@/lib/adapters/aerodatabox", () => ({ fetchFlight: vi.fn() }));
 vi.mock("@/lib/engine/reconcile", () => ({ reconcileWatch: vi.fn() }));
 vi.mock("@/lib/scheduler/backoff", () => ({ backoffWatch: vi.fn() }));
+vi.mock("@/lib/push/dispatch", () => ({ dispatchOutbox: vi.fn() }));
+vi.mock("@/lib/calibration/backfill", () => ({ expireStaleSelfReports: vi.fn() }));
 
 import { GET, POST } from "@/app/api/cron/reconcile/route";
 import { selectDueWatches } from "@/lib/scheduler/select";
 import { reconcileDueBatch, type BatchSummary } from "@/lib/scheduler/batch";
+import { dispatchOutbox } from "@/lib/push/dispatch";
+import { expireStaleSelfReports } from "@/lib/calibration/backfill";
 
 const SECRET = "test-cron-secret";
 
@@ -39,6 +43,9 @@ describe("/api/cron/reconcile route", () => {
     process.env.CRON_SECRET = SECRET;
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
+    // Post-reconcile side effects are best-effort and out of scope for these wiring tests.
+    vi.mocked(dispatchOutbox).mockResolvedValue({ claimed: 0, sent: 0, failed: 0, noDevice: 0, pruned: 0 });
+    vi.mocked(expireStaleSelfReports).mockResolvedValue(0);
   });
 
   it("rejects a wrong secret with 401 and spends nothing (validate-before-spend)", async () => {
@@ -59,8 +66,9 @@ describe("/api/cron/reconcile route", () => {
     vi.mocked(reconcileDueBatch).mockResolvedValue(summary);
     const res = await POST(req(`Bearer ${SECRET}`));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual(summary);
+    expect(await res.json()).toMatchObject({ ...summary, dispatched: 0, expired: 0 });
     expect(selectDueWatches).toHaveBeenCalledTimes(1);
+    expect(dispatchOutbox).toHaveBeenCalledTimes(1); // outbox drained after the batch
   });
 
   it("accepts GET too (scheduler method-default safety)", async () => {

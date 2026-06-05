@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { fetchFlight } from "@/lib/adapters/aerodatabox";
 import { geocodeAirport, resolvePlace } from "@/lib/adapters/osm";
 import { mintToken, hashToken } from "@/lib/security/capability";
+import { withinWatchCap } from "@/lib/security/ratelimit";
 import { appendSnapshot } from "@/lib/calibration/writer";
 import { detectCollision } from "./collision";
 import { validateArm } from "./validation";
@@ -41,6 +42,14 @@ export type ArmResult = { ok: true; watch: ArmedWatch } | { ok: false; reason: s
  * Adapter calls happen BEFORE the transaction so a flaky upstream can't leave a half-armed watch.
  */
 export async function armWatch(req: ArmRequest, nowUtc: string): Promise<ArmResult> {
+  // 0. Per-device active-watch cap (R24) — refuse BEFORE paying for any upstream lookup.
+  const sql = db();
+  const capRows = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM watches WHERE device_id = ${req.deviceId} AND terminal = FALSE`;
+  if (!withinWatchCap(capRows[0].n)) {
+    return { ok: false, reason: "You've reached the maximum number of active watches on this device." };
+  }
+
   // 1. Flight.
   const flightRes = await fetchFlight(req.flightNumber, req.flightDate);
   if (flightRes.kind === "not_found") return { ok: false, reason: "No flight found for that number and date." };
@@ -104,7 +113,6 @@ export async function armWatch(req: ArmRequest, nowUtc: string): Promise<ArmResu
   const token = mintToken();
   const tokenHash = hashToken(token);
   const marginSource = req.marginMinutes === undefined ? "default" : "user";
-  const sql = db();
   try {
     await sql.begin(async (tx) => {
       await tx`

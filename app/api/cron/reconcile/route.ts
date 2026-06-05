@@ -1,6 +1,8 @@
 import { fetchFlight } from "@/lib/adapters/aerodatabox";
+import { expireStaleSelfReports } from "@/lib/calibration/backfill";
 import { ENGINE } from "@/lib/engine/constants";
 import { reconcileWatch } from "@/lib/engine/reconcile";
+import { dispatchOutbox } from "@/lib/push/dispatch";
 import { backoffWatch } from "@/lib/scheduler/backoff";
 import { reconcileDueBatch } from "@/lib/scheduler/batch";
 import { selectDueWatches } from "@/lib/scheduler/select";
@@ -32,9 +34,27 @@ async function handleTick(req: Request): Promise<Response> {
       new Date().toISOString(),
       ENGINE.maxWatchesPerTick,
     );
+    // After reconcile commits, drain the transactional outbox (send the catches at-least-once) and
+    // retire any unanswered self-report prompts. Both are best-effort: a failure here must not fail
+    // the reconcile tick (the fired_transitions rows stay 'attempting' and dispatch retries next tick).
+    let dispatched: number | null = null;
+    let expired: number | null = null;
+    try {
+      const d = await dispatchOutbox();
+      dispatched = d.sent;
+    } catch (e) {
+      console.error(`[cron/reconcile] dispatch failed: ${e instanceof Error ? e.message : "unknown"}`);
+    }
+    try {
+      expired = await expireStaleSelfReports();
+    } catch (e) {
+      console.error(`[cron/reconcile] self-report sweep failed: ${e instanceof Error ? e.message : "unknown"}`);
+    }
+
+    const tick = { ...summary, dispatched, expired };
     // Server-side signal so an all-errors tick isn't invisible (the scheduler may not log bodies).
-    console.log(`[cron/reconcile] ${JSON.stringify(summary)}`);
-    return Response.json(summary, { status: 200 });
+    console.log(`[cron/reconcile] ${JSON.stringify(tick)}`);
+    return Response.json(tick, { status: 200 });
   } catch (err) {
     // The selector or pool failed (per-watch failures are isolated inside the batch). Keep the JSON
     // error shape consistent and let the scheduler retry on the non-2xx. Never log the secret.

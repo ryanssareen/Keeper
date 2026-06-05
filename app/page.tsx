@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { InstallPrompt } from "@/components/InstallPrompt";
 
 type ArmedWatch = {
   watchId: string;
@@ -167,6 +168,8 @@ export default function Home() {
           </p>
         </div>
       )}
+
+      <InstallPrompt />
     </main>
   );
 }
