@@ -42,6 +42,14 @@ export function zoneFor(lat: number, lng: number): string {
   return tzlookup(lat, lng);
 }
 
+/** Geocode an airport (by IATA code or name) to coordinates via Nominatim. */
+export async function geocodeAirport(
+  query: string,
+): Promise<{ lat: number; lng: number } | null> {
+  const geo = parseGeocode(await fetchJson(buildGeocodeUrl(`${query} airport`)));
+  return geo ? { lat: geo.lat, lng: geo.lng } : null;
+}
+
 /** Parse an OSRM driving response to minutes; null when there is no usable route. */
 export function parseDirectionsMinutes(raw: unknown): number | null {
   if (typeof raw !== "object" || raw === null) return null;
