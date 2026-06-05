@@ -56,6 +56,36 @@ describe("validateSubscription — host allowlist", () => {
     }
   });
 
+  it.each([
+    "https://127.0.0.1/wpush/v2/abc", // IPv4 loopback
+    "https://10.0.0.5/abc", // RFC1918 private
+    "https://169.254.169.254/latest/meta-data/", // cloud metadata — the classic SSRF target
+    "https://[::1]/abc", // IPv6 loopback literal
+    "https://[fd00::1]/abc", // IPv6 ULA literal
+  ])("rejects an IP-literal endpoint as untrusted (SSRF: no push service is a bare IP) %s", (endpoint) => {
+    // The host allowlist is hostname-based; a raw IP literal can never end with an allowed suffix
+    // nor equal an EXACT host, so it falls through to untrusted_host. This is the SSRF boundary that
+    // stops a stored subscription from coercing the dispatcher into hitting internal/metadata IPs.
+    const res = validateSubscription(clean({ endpoint }));
+    expect(res.valid).toBe(false);
+    if (!res.valid) {
+      expect(res.reason).toBe("untrusted_host");
+    }
+  });
+
+  it("ACCEPTS a host that prefixes a real allowlisted suffix (evil.com.push.apple.com) — intended", () => {
+    // INTENDED behaviour, asserted to pin it: `evil.com.push.apple.com` ends with `.push.apple.com`,
+    // so it is a genuine subdomain UNDER apple.com's `push.apple.com` zone. Apple controls every
+    // label beneath `push.apple.com`; an attacker cannot register `evil.com.push.apple.com` (that
+    // would require control of apple.com's DNS). So this is NOT attacker-controllable and is safe to
+    // store. The suffix check matches a label boundary precisely (note the leading dot), which is
+    // exactly why the earlier `web.push.apple.com.attacker.com` case — where `.attacker.com` is the
+    // real registrable domain — is correctly REJECTED. Host-suffix trust hinges on who owns the
+    // registrable domain, not on string position.
+    const res = validateSubscription(clean({ endpoint: "https://evil.com.push.apple.com/abc" }));
+    expect(res.valid).toBe(true);
+  });
+
   it("rejects a non-https endpoint", () => {
     const res = validateSubscription(clean({ endpoint: "http://fcm.googleapis.com/fcm/send/x" }));
     expect(res.valid).toBe(false);

@@ -1,17 +1,17 @@
 import { z } from "zod";
-import { db } from "@/lib/db";
 import { recordSelfReport } from "@/lib/calibration/writer";
-import { verifyToken } from "@/lib/security/capability";
+import { loadAndVerifyWatch } from "@/lib/security/watchGate";
 
 /**
  * POST /api/self-report — the one-tap outcome capture behind a notification action (U8).
  *
  * Body { watchId, token, outcome: 'made'|'missed'|'changed', wasUseful? } — this contract MUST match
- * the service-worker notification action payload (U8). Capability-checked (R23): the presented token
- * is verified against the watch's stored owner_token_hash; a missing watch is 404 and a bad token is
- * 403. On success the outcome routes through the sole calibration writer (recordSelfReport), which
- * only updates a pending/expired row, so a replay or a double-tap is harmless. Mirrors the native
- * Request/Response route convention of app/api/watch/route.ts — no Pages Router, no NextResponse.
+ * the service-worker notification action payload (U8). Capability-checked (R23) through the shared
+ * watch gate (loadAndVerifyWatch): a missing watch OR a bad token both return a UNIFORM 403 — a
+ * distinct 404 would be an existence oracle (a guesser learns which watch ids are live), matching the
+ * dashboard gate's indistinguishable copy. On success the outcome routes through the sole calibration
+ * writer (recordSelfReport), which only updates a pending/expired row, so a replay or a double-tap is
+ * harmless. Mirrors the native Request/Response route convention of app/api/watch/route.ts.
  */
 
 const SelfReportBody = z.object({
@@ -36,11 +36,10 @@ export async function POST(req: Request): Promise<Response> {
 
   const { watchId, token, outcome, wasUseful } = parsed.data;
 
-  const sql = db();
-  const rows = await sql`SELECT owner_token_hash FROM watches WHERE id = ${watchId}`;
-  // Uniform denial for a missing watch OR a bad token — a distinct 404 would be an existence oracle
-  // (a guesser learns which watch ids are live), matching the dashboard gate's indistinguishable copy.
-  if (rows.length === 0 || !verifyToken(token, String(rows[0].owner_token_hash))) {
+  // Uniform denial: the shared gate returns the same { ok: false } for a missing watch and a bad
+  // token, so this 403 never doubles as an existence oracle.
+  const access = await loadAndVerifyWatch(watchId, token);
+  if (!access.ok) {
     return Response.json({ error: "Forbidden." }, { status: 403 });
   }
 

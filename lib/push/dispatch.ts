@@ -1,11 +1,18 @@
+import { createHash } from "node:crypto";
+
 import { DateTime } from "luxon";
 import webpush, { WebPushError } from "web-push";
 
 import { db } from "@/lib/db";
-import { recordDelivery } from "@/lib/calibration/writer";
+import {
+  claimFiredTransitions,
+  reclaimStuckSending,
+  recordDelivery,
+  requeueFiredTransition,
+} from "@/lib/calibration/writer";
 import { renderCatch } from "@/lib/push/template";
 import type { StructuredAdvice, CatchMessage } from "@/lib/push/types";
-import type { DeliveryStatus } from "@/lib/calibration/types";
+import type { ClaimedOutboxRow } from "@/lib/calibration/types";
 import type { FiredKind } from "@/lib/engine/types";
 
 /**
@@ -178,17 +185,33 @@ export function planSend(
 }
 
 /**
- * PURE: classify a web-push error into a delivery status + whether to prune the subscription.
- * 404 (Not Found) and 410 (Gone) mean the push service has permanently retired the endpoint, so the
- * credential is dead and must be deleted; any other failure is transient (mark `failed`, keep the
- * row + subscription for the next sweep).
+ * The disposition of a failed send (PURE classification of a web-push error):
+ *  - `prune`:  the endpoint is permanently dead (404/410) — record `failed` AND delete the dead
+ *              subscription credential. The push service has retired it; retrying can never succeed.
+ *  - `retry`:  the failure is TRANSIENT — return the row to `attempting` so the next sweep retries
+ *              (at-least-once). Covers a network/timeout error (no statusCode), 408 Request Timeout,
+ *              429 Too Many Requests, and any 5xx (the push service itself faltered).
+ *  - `failed`: a permanent, non-prune client error (other 4xx, e.g. 400/401/403/413) — record
+ *              `failed` and stop. Retrying an unauthorized/oversized/malformed request is futile, but
+ *              the credential isn't proven dead, so we don't prune it.
  */
-export function classifySendError(statusCode: number | undefined): {
-  status: Extract<DeliveryStatus, "failed">;
-  prune: boolean;
-} {
-  const prune = statusCode === 404 || statusCode === 410;
-  return { status: "failed", prune };
+export type SendDisposition = "prune" | "retry" | "failed";
+
+/**
+ * PURE: classify a web-push error into a {@link SendDisposition}. `statusCode` is the HTTP status the
+ * push service returned, or `undefined` for a transport-level failure (DNS/TLS/timeout) that never
+ * reached a response — those are treated as retryable.
+ */
+export function classifySendError(statusCode: number | undefined): SendDisposition {
+  if (statusCode === 404 || statusCode === 410) {
+    return "prune";
+  }
+  // No response at all (timeout/network), an explicit timeout, throttling, or a server-side 5xx are
+  // all worth another sweep. Everything else (the remaining 4xx) is a permanent client error.
+  if (statusCode === undefined || statusCode === 408 || statusCode === 429 || statusCode >= 500) {
+    return "retry";
+  }
+  return "failed";
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -224,106 +247,128 @@ function ensureVapid(): void {
 
 const DASHBOARD_PATH = (watchId: string): string => `/dashboard?id=${encodeURIComponent(watchId)}`;
 
+/**
+ * Build the absolute dashboard URL a catch notification opens. `NEXT_PUBLIC_APP_URL` is the public
+ * origin; like {@link ensureVapid}, a production deploy that forgot to set it FAILS LOUD here rather
+ * than silently shipping a relative `url` a push client can't open. In dev we tolerate the unset var
+ * and fall back to the relative path so local runs aren't blocked on configuring an origin.
+ */
 function absoluteUrl(path: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
-  return base ? `${base.replace(/\/+$/, "")}${path}` : path;
-}
-
-interface OutboxJoinRow {
-  watch_id: string;
-  transition: string;
-  revision: string;
-  kind: FiredKind;
-  lead_time_minutes: number | null;
-  device_id: string;
-  flight_number: string;
-  place_label: string;
-  reschedulable: boolean;
-  contact: string | null;
-  commitment_zone: string;
-  commitment_instant: Date;
-  predicted_arrival: Date | null;
-  transit_minutes_used: number | null;
-  egress_minutes_used: number | null;
-  margin_minutes_used: number | null;
-}
-
-export interface DispatchSummary {
-  claimed: number;
-  sent: number;
-  failed: number;
-  noDevice: number;
-  pruned: number;
+  const base = process.env.NEXT_PUBLIC_APP_URL;
+  if (base) {
+    return `${base.replace(/\/+$/, "")}${path}`;
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "NEXT_PUBLIC_APP_URL is not set: push notifications need an absolute base URL for their deep-links in production.",
+    );
+  }
+  return path;
 }
 
 /**
- * Drain the outbox: for every `attempting` fired transition, render its catch, send it to the
- * owning device's subscription, and record the outcome. At-least-once — a transient failure is left
- * `attempting` for a later sweep; a permanent 404/410 prunes the dead subscription. `limit` bounds
- * one sweep so a backlog can't run unbounded inside a single cron tick.
+ * A short, stable dedup key (web-push `Topic` header) for one firing. The push service collapses any
+ * queued message carrying the same Topic for the same subscription to the newest — a belt-and-braces
+ * guard if a duplicate ever slips past the outbox's unique constraint. sha256 of the firing identity,
+ * base64url, truncated to web-push's 32-char Topic ceiling (URL/filename-safe base64 only).
+ */
+function dedupeTopic(watchId: string, transition: string, revision: string): string {
+  return createHash("sha256")
+    .update(`${watchId}:${transition}:${revision}`)
+    .digest("base64url")
+    .slice(0, 32);
+}
+
+// How long a row may sit in `sending` before a sweep assumes the dispatcher that claimed it died and
+// reclaims it to `attempting`. INVARIANT: this must exceed the whole batch's worst-case wall-clock,
+// not just one send — `claimed_at` is stamped once for the whole claimed batch, and the loop sends
+// SERIALLY, so a late row in a `limit`-sized batch isn't even sent until ~`limit` × SEND_TIMEOUT_MS
+// after the claim. If the TTL were shorter, an overlapping tick could reclaim+re-send a row a live
+// tick still owns (duplicate notification). 15 min > 50 × 10s = 8.3 min, with margin.
+const STUCK_SENDING_TTL_MINUTES = 15;
+
+export interface DispatchSummary {
+  /** Rows leased this sweep (moved `attempting` -> `sending`). */
+  claimed: number;
+  sent: number;
+  /** Permanently failed (404/410 prune, or a non-retryable 4xx). */
+  failed: number;
+  /** Transient failures returned to `attempting` for the next sweep (at-least-once). */
+  deferred: number;
+  noDevice: number;
+  pruned: number;
+  /** Stranded `sending` rows from a crashed prior tick that this sweep returned to `attempting`. */
+  reclaimed: number;
+}
+
+/** Map a claimed (joined) outbox row to the pure planner's inputs + the device subscription. */
+function mapClaimedRow(r: ClaimedOutboxRow): {
+  outbox: OutboxRow;
+  ctx: DispatchContext;
+  subscription: StoredSubscription | null;
+} {
+  const outbox: OutboxRow = {
+    watchId: r.watch_id,
+    transition: r.transition,
+    revision: r.revision,
+    kind: r.kind,
+    leadTimeMinutes: r.lead_time_minutes,
+  };
+  const ctx: DispatchContext = {
+    flightNumber: r.flight_number,
+    placeLabel: r.place_label,
+    reschedulable: r.reschedulable,
+    contact: r.contact,
+    zone: r.commitment_zone,
+    commitmentInstantUtc: r.commitment_instant.toISOString(),
+    dashboardUrl: absoluteUrl(DASHBOARD_PATH(r.watch_id)),
+    predictedArrivalUtc: r.predicted_arrival ? r.predicted_arrival.toISOString() : null,
+    transitMinutesUsed: r.transit_minutes_used ?? 0,
+    egressMinutesUsed: r.egress_minutes_used ?? 0,
+    marginMinutesUsed: r.margin_minutes_used ?? 0,
+  };
+  // The newest subscription rides along on the claim's lateral join (no per-row query). A device
+  // with none registered has null sub columns -> no_device.
+  const subscription: StoredSubscription | null =
+    r.sub_id !== null && r.sub_endpoint !== null && r.sub_p256dh !== null && r.sub_auth !== null
+      ? { id: r.sub_id, endpoint: r.sub_endpoint, p256dh: r.sub_p256dh, auth: r.sub_auth }
+      : null;
+  return { outbox, ctx, subscription };
+}
+
+/**
+ * Drain the outbox at-least-once and exactly-once-per-tick:
+ *  1. reclaim any `sending` rows a crashed prior tick stranded (crash recovery);
+ *  2. ATOMICALLY claim up to `limit` of the oldest `attempting` rows to `sending` (the claim is the
+ *     concurrency gate — two overlapping cron ticks partition the backlog via FOR UPDATE SKIP LOCKED,
+ *     so a given firing is sent by exactly one tick, never double-sent);
+ *  3. for each claimed row: render its catch, send it to the device's newest subscription (which
+ *     rode along on the claim — no per-row query), and SETTLE the lease — `sent` on success, back to
+ *     `attempting` on a transient failure (retry next sweep), `failed` on a permanent error, and a
+ *     dead 404/410 endpoint additionally prunes the subscription.
+ * `limit` bounds one sweep so a backlog can't run unbounded inside a single cron tick.
  */
 export async function dispatchOutbox(limit = 50): Promise<DispatchSummary> {
   ensureVapid();
-  const sql = db();
-  const summary: DispatchSummary = { claimed: 0, sent: 0, failed: 0, noDevice: 0, pruned: 0 };
+  const summary: DispatchSummary = {
+    claimed: 0,
+    sent: 0,
+    failed: 0,
+    deferred: 0,
+    noDevice: 0,
+    pruned: 0,
+    reclaimed: 0,
+  };
 
-  // Join the outbox to its watch and that watch's latest snapshot (predicted arrival + the durations
-  // used at reconcile time). LEFT JOIN LATERAL keeps rows with no snapshot yet (advice degrades to
-  // "running late" copy rather than vanishing). Oldest-first, matching the partial index.
-  const rows = await sql<OutboxJoinRow[]>`
-    SELECT ft.watch_id, ft.transition, ft.revision, ft.kind, ft.lead_time_minutes,
-           w.device_id, w.flight_number, w.place_label, w.reschedulable, w.contact,
-           w.commitment_zone, w.commitment_instant,
-           s.predicted_arrival, s.transit_minutes_used, s.egress_minutes_used, s.margin_minutes_used
-    FROM fired_transitions ft
-    JOIN watches w ON w.id = ft.watch_id
-    LEFT JOIN LATERAL (
-      SELECT predicted_arrival, transit_minutes_used, egress_minutes_used, margin_minutes_used
-      FROM prediction_snapshots
-      WHERE watch_id = ft.watch_id
-      ORDER BY fetched_at DESC
-      LIMIT 1
-    ) s ON TRUE
-    WHERE ft.delivery_status = 'attempting'
-    ORDER BY ft.created_at ASC
-    LIMIT ${limit}`;
+  summary.reclaimed = await reclaimStuckSending(STUCK_SENDING_TTL_MINUTES);
 
+  const rows = await claimFiredTransitions(limit);
   summary.claimed = rows.length;
 
   for (const r of rows) {
-    const outbox: OutboxRow = {
-      watchId: r.watch_id,
-      transition: r.transition,
-      revision: r.revision,
-      kind: r.kind,
-      leadTimeMinutes: r.lead_time_minutes,
-    };
-    const ctx: DispatchContext = {
-      flightNumber: r.flight_number,
-      placeLabel: r.place_label,
-      reschedulable: r.reschedulable,
-      contact: r.contact,
-      zone: r.commitment_zone,
-      commitmentInstantUtc: r.commitment_instant.toISOString(),
-      dashboardUrl: absoluteUrl(DASHBOARD_PATH(r.watch_id)),
-      predictedArrivalUtc: r.predicted_arrival ? r.predicted_arrival.toISOString() : null,
-      transitMinutesUsed: r.transit_minutes_used ?? 0,
-      egressMinutesUsed: r.egress_minutes_used ?? 0,
-      marginMinutesUsed: r.margin_minutes_used ?? 0,
-    };
-
+    const { outbox, ctx, subscription } = mapClaimedRow(r);
     const advice = buildAdvice(outbox, ctx);
     const message = renderCatch(advice);
-
-    // Find the device's freshest subscription (a device may have re-subscribed; newest wins).
-    const subs = await sql<StoredSubscription[]>`
-      SELECT id, endpoint, p256dh, auth
-      FROM push_subscriptions
-      WHERE device_id = ${r.device_id}
-      ORDER BY created_at DESC
-      LIMIT 1`;
-    const subscription: StoredSubscription | null = subs.length > 0 ? subs[0] : null;
-
     const plan = planSend(outbox, ctx, message, subscription);
 
     if (plan.action === "no_device") {
@@ -332,29 +377,41 @@ export async function dispatchOutbox(limit = 50): Promise<DispatchSummary> {
       continue;
     }
 
-    const status = await sendOne(plan);
-    if (status.delivered) {
+    const result = await sendOne(plan, outbox);
+    if (result.delivered) {
       await recordDelivery(outbox.watchId, outbox.transition, outbox.revision, "sent");
       summary.sent += 1;
-    } else {
-      await recordDelivery(outbox.watchId, outbox.transition, outbox.revision, status.status);
-      summary.failed += 1;
-      if (status.prune) {
-        await pruneSubscription(plan.subscription.id);
-        summary.pruned += 1;
-      }
+      continue;
+    }
+    if (result.disposition === "retry") {
+      // Transient — return the lease to `attempting`; do NOT record a terminal status. Next sweep retries.
+      await requeueFiredTransition(outbox.watchId, outbox.transition, outbox.revision);
+      summary.deferred += 1;
+      continue;
+    }
+    // Permanent: record failed, and prune a dead (404/410) endpoint.
+    await recordDelivery(outbox.watchId, outbox.transition, outbox.revision, "failed");
+    summary.failed += 1;
+    if (result.disposition === "prune") {
+      await pruneSubscription(plan.subscription.id);
+      summary.pruned += 1;
     }
   }
 
   return summary;
 }
 
-type SendResult =
-  | { delivered: true }
-  | { delivered: false; status: Extract<DeliveryStatus, "failed">; prune: boolean };
+type SendResult = { delivered: true } | { delivered: false; disposition: SendDisposition };
 
-/** Thin web-push call for one planned send. Never throws — failures become a typed SendResult. */
-async function sendOne(plan: Extract<SendPlan, { action: "send" }>): Promise<SendResult> {
+/**
+ * Thin web-push call for one planned send. Never throws — failures become a typed {@link SendResult}
+ * carrying the {@link SendDisposition} (retry / failed / prune). A stable per-firing `Topic` lets the
+ * push service collapse any duplicate that slipped past the outbox's unique constraint.
+ */
+async function sendOne(
+  plan: Extract<SendPlan, { action: "send" }>,
+  row: OutboxRow,
+): Promise<SendResult> {
   try {
     await webpush.sendNotification(
       {
@@ -362,13 +419,17 @@ async function sendOne(plan: Extract<SendPlan, { action: "send" }>): Promise<Sen
         keys: { p256dh: plan.subscription.p256dh, auth: plan.subscription.auth },
       },
       JSON.stringify(plan.payload),
-      { TTL: plan.ttlSeconds, urgency: "high", timeout: SEND_TIMEOUT_MS },
+      {
+        TTL: plan.ttlSeconds,
+        urgency: "high",
+        timeout: SEND_TIMEOUT_MS,
+        topic: dedupeTopic(row.watchId, row.transition, row.revision),
+      },
     );
     return { delivered: true };
   } catch (err) {
     const statusCode = err instanceof WebPushError ? err.statusCode : undefined;
-    const { status, prune } = classifySendError(statusCode);
-    return { delivered: false, status, prune };
+    return { delivered: false, disposition: classifySendError(statusCode) };
   }
 }
 

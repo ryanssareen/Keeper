@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { armWatch } from "@/lib/engine/arm";
 import { db } from "@/lib/db";
-import { verifyToken } from "@/lib/security/capability";
+import { loadAndVerifyWatch } from "@/lib/security/watchGate";
 
 const ArmBody = z.object({
   deviceId: z.string().min(8).max(128),
@@ -40,18 +40,13 @@ export async function GET(req: Request): Promise<Response> {
   const token = url.searchParams.get("token");
   if (!id || !token) return Response.json({ error: "Missing id or token." }, { status: 400 });
 
+  // Shared gate: SELECT-then-verify in one place. Uniform 403 for a missing watch OR a bad token —
+  // no 404 existence oracle (a guesser can't tell 'no such watch' from 'not your watch').
+  const access = await loadAndVerifyWatch(id, token);
+  if (!access.ok) return Response.json({ error: "Forbidden." }, { status: 403 });
+
+  const w = access.watch;
   const sql = db();
-  const rows = await sql`
-    SELECT id, owner_token_hash, state, place_label, flight_number, commitment_zone,
-           commitment_instant, transit_minutes, reschedulable, contact
-    FROM watches WHERE id = ${id}`;
-  if (rows.length === 0) return Response.json({ error: "Not found." }, { status: 404 });
-
-  const w = rows[0];
-  if (!verifyToken(token, String(w.owner_token_hash))) {
-    return Response.json({ error: "Forbidden." }, { status: 403 });
-  }
-
   const snap = await sql`
     SELECT verdict, slack_minutes, predicted_arrival, resulting_state, fetched_at
     FROM prediction_snapshots WHERE watch_id = ${id} ORDER BY fetched_at DESC LIMIT 1`;
@@ -59,10 +54,10 @@ export async function GET(req: Request): Promise<Response> {
   return Response.json({
     id: w.id,
     state: w.state,
-    placeLabel: w.place_label,
-    flightNumber: w.flight_number,
-    commitmentInstantUtc: w.commitment_instant,
-    zone: w.commitment_zone,
+    placeLabel: w.placeLabel,
+    flightNumber: w.flightNumber,
+    commitmentInstantUtc: w.commitmentInstantUtc,
+    zone: w.commitmentZone,
     reschedulable: w.reschedulable,
     latest: snap[0] ?? null,
   });

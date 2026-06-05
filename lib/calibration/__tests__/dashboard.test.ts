@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { buildWatchView } from "@/lib/calibration/dashboard";
+import { buildWatchView, narrow } from "@/lib/calibration/dashboard";
 import type {
   CatchHistoryEntry,
   WatchViewRow,
 } from "@/lib/calibration/dashboard";
+import { DELIVERY_STATUSES } from "@/lib/calibration/types";
 import type { CalibrationRow, PredictionSnapshot } from "@/lib/calibration/types";
+import { WATCH_STATES } from "@/lib/engine/types";
 
 /**
  * Pure view-model tests for the U10 dashboard. The builder owns every field mapping and ordering
@@ -244,5 +246,29 @@ describe("buildWatchView — non-CATCH firings and degraded states", () => {
     const statuses = view.catchHistory.map((c) => c.deliveryStatus);
     expect(statuses).toContain("no_device");
     expect(statuses).toContain("failed");
+  });
+});
+
+describe("narrow — DB boundary (fail loud, no silent drift)", () => {
+  it("returns a value that is a member of the allowed set", () => {
+    expect(narrow("AT_RISK", WATCH_STATES, "watches.state")).toBe("AT_RISK");
+    expect(narrow("no_device", DELIVERY_STATUSES, "fired_transitions.delivery_status")).toBe("no_device");
+  });
+
+  it("THROWS on a value the union no longer contains (a renamed/typo'd enum) instead of coercing it", () => {
+    // The whole point: a bare `String(x) as WatchState` would let "AT_RSK" through as a bogus member
+    // and only blow up later in a render path. narrow refuses it right at the boundary.
+    expect(() => narrow("AT_RSK", WATCH_STATES, "watches.state")).toThrow();
+    expect(() => narrow("delivered", DELIVERY_STATUSES, "fired_transitions.delivery_status")).toThrow();
+  });
+
+  it("names the offending column and value in the error so a drift is diagnosable", () => {
+    expect(() => narrow("bogus", WATCH_STATES, "watches.state")).toThrow(/watches\.state/);
+    expect(() => narrow("bogus", WATCH_STATES, "watches.state")).toThrow(/bogus/);
+  });
+
+  it("rejects a null/undefined driver value (callers must null-guard before narrowing)", () => {
+    expect(() => narrow(null, WATCH_STATES, "watches.state")).toThrow();
+    expect(() => narrow(undefined, WATCH_STATES, "watches.state")).toThrow();
   });
 });

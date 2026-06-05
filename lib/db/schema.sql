@@ -73,17 +73,35 @@ CREATE TABLE IF NOT EXISTS fired_transitions (
   kind               TEXT NOT NULL CHECK (kind IN ('CATCH','ALL_CLEAR','CANNOT_CONFIRM','DEFINITE_MISS','CANCELLED')),
   lead_time_minutes  INTEGER,
   useful_lead        BOOLEAN,
+  -- Lifecycle: attempting -> sending (claimed by a dispatcher tick) -> sent | failed | no_device.
+  -- 'sending' is the in-flight lease that makes the claim atomic: a row is moved here under
+  -- FOR UPDATE SKIP LOCKED before the web-push call, so two overlapping cron ticks can never grab
+  -- and double-send the same firing. A transient send failure moves it BACK to 'attempting'.
   delivery_status    TEXT NOT NULL DEFAULT 'attempting'
-                       CHECK (delivery_status IN ('attempting','sent','failed','no_device')),
+                       CHECK (delivery_status IN ('attempting','sending','sent','failed','no_device')),
+  claimed_at         TIMESTAMPTZ,                     -- when a dispatcher leased the row ('sending'); drives stuck-lease recovery
   sent_at            TIMESTAMPTZ,
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (watch_id, transition, revision)
 );
 
--- Dispatcher (U8) claim query: sweep unsent rows across all watches, oldest first. Partial index
+-- Additive migration for DBs created before 'sending'/claimed_at existed (CREATE TABLE IF NOT EXISTS
+-- never alters an existing table). Drop-then-recreate the CHECK so the new state is permitted, and
+-- add claimed_at if absent. Both are idempotent — safe to run on every boot.
+ALTER TABLE fired_transitions DROP CONSTRAINT IF EXISTS fired_transitions_delivery_status_check;
+ALTER TABLE fired_transitions
+  ADD CONSTRAINT fired_transitions_delivery_status_check
+  CHECK (delivery_status IN ('attempting','sending','sent','failed','no_device'));
+ALTER TABLE fired_transitions ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
+
+-- Dispatcher (U8) claim query: sweep claimable rows across all watches, oldest first. Partial index
 -- keeps it an index-only scan over just the 'attempting' backlog instead of the whole outbox.
 CREATE INDEX IF NOT EXISTS fired_transitions_unsent
   ON fired_transitions (created_at) WHERE delivery_status = 'attempting';
+
+-- Stuck-lease recovery scan: find 'sending' rows a crashed tick never finished, oldest claim first.
+CREATE INDEX IF NOT EXISTS fired_transitions_sending
+  ON fired_transitions (claimed_at) WHERE delivery_status = 'sending';
 
 -- One outcome row per watch. Non-response is explicit, never a sentinel.
 CREATE TABLE IF NOT EXISTS calibration (

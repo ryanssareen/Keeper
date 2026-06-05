@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { upsertWatchToken } from "@/lib/storage/watchTokens";
 
 type ArmedWatch = {
   watchId: string;
@@ -25,11 +26,14 @@ function getDeviceId(): string {
   return id;
 }
 
+/**
+ * Persist the capability token keyed by watchId so a push deep-link (/dashboard?id=…, which carries no
+ * token) can resolve on this device: the dashboard's fallback reads keeper-watches[id] and redirects to
+ * ?id=&token=. Stored as a map { [watchId]: token }. Reads tolerate the older list shape too.
+ */
 function saveWatch(w: ArmedWatch): void {
   const KEY = "keeper-watches";
-  const list = JSON.parse(localStorage.getItem(KEY) ?? "[]") as { watchId: string; token: string }[];
-  list.push({ watchId: w.watchId, token: w.token });
-  localStorage.setItem(KEY, JSON.stringify(list));
+  localStorage.setItem(KEY, upsertWatchToken(localStorage.getItem(KEY), w.watchId, w.token));
 }
 
 const STATE_COPY: Record<string, { label: string; tone: string }> = {
@@ -163,8 +167,15 @@ export default function Home() {
               <dd>{result.slackMinutes === null ? "—" : `${result.slackMinutes} min`}</dd>
             </div>
           </dl>
-          <p className="mt-4 text-xs text-zinc-400">
-            Watch armed. Keep this device — your access token is saved locally.
+          <a
+            href={`/dashboard?id=${encodeURIComponent(result.watchId)}&token=${encodeURIComponent(result.token)}`}
+            className="mt-4 inline-flex w-full items-center justify-center rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:border-zinc-900 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-zinc-100"
+          >
+            View watch dashboard
+          </a>
+          <p className="mt-3 text-xs text-zinc-400">
+            Watch armed. Keep this device — your access token is saved locally so a notification link
+            opens straight to your dashboard.
           </p>
         </div>
       )}

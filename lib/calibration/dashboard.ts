@@ -8,6 +8,12 @@
  * four corpus tables via db(). No metric semantics live here — those are owned by metrics.ts.
  */
 import { db } from "@/lib/db";
+import {
+  DELIVERY_STATUSES,
+  ENRICHMENT_STATES,
+  OUTCOMES,
+  SELF_REPORT_STATUSES,
+} from "@/lib/calibration/types";
 import type {
   CalibrationRow,
   DeliveryStatus,
@@ -16,6 +22,7 @@ import type {
   PredictionSnapshot,
   SelfReportStatus,
 } from "@/lib/calibration/types";
+import { FIRED_KINDS, VERDICTS, WATCH_STATES } from "@/lib/engine/types";
 import type { FiredKind, Verdict, WatchState } from "@/lib/engine/types";
 
 /** The watch fields the dashboard renders. A DB-shaped projection (one watches row, coerced). */
@@ -164,17 +171,17 @@ export type LoadWatchResult =
 
 /**
  * Thin IO: load one watch plus its prediction_snapshots, fired_transitions, and calibration row via
- * db(). Returns the owner_token_hash so the caller (the page) can run the capability check itself —
- * this function never reads the presented token. Kept deliberately small; all shaping/derivation is
- * in buildWatchView. Not unit-tested (no DB in CI); exercised through the live page.
+ * db(), for an ALREADY-AUTHORIZED id. The capability gate no longer lives here — the page verifies the
+ * presented token through the shared watch gate (lib/security/watchGate) BEFORE calling this, so this
+ * function never reads the token or the owner hash. That keeps the security boundary in one place and
+ * the calibration module purely a view loader. Kept deliberately small; all shaping/derivation is in
+ * buildWatchView. Not unit-tested (no DB in CI); exercised through the live page.
  */
-export async function loadWatchForView(
-  id: string,
-): Promise<(LoadWatchResult & { status: "ok"; ownerTokenHash: string }) | { status: "not_found" }> {
+export async function loadWatchForView(id: string): Promise<LoadWatchResult> {
   const sql = db();
 
   const watchRows = await sql`
-    SELECT id, owner_token_hash, state, place_label, commitment_zone, commitment_instant,
+    SELECT id, state, place_label, commitment_zone, commitment_instant,
            transit_minutes, transit_source, reschedulable, flight_number, arrival_airport,
            place_resolved, last_fetched_at
     FROM watches WHERE id = ${id}`;
@@ -197,15 +204,17 @@ export async function loadWatchForView(
   ]);
 
   // DB boundary: coerce the untyped driver rows into the typed projections the pure builder expects.
-  // This is the only place coercion is allowed; the builder owns all semantics.
+  // This is the only place coercion is allowed; the builder owns all semantics. Enum columns go
+  // through `narrow` (not a bare `as` cast) so a drifted/renamed value fails loud here rather than
+  // slipping through as a bogus union member and surfacing as an unhandled case deep in the UI.
   const watch: WatchViewRow = {
     id: String(w.id),
-    state: String(w.state) as WatchState,
+    state: narrow(w.state, WATCH_STATES, "watches.state"),
     placeLabel: String(w.place_label),
     commitmentZone: String(w.commitment_zone),
     commitmentInstantUtc: toIso(w.commitment_instant),
     transitMinutes: Number(w.transit_minutes),
-    transitSource: String(w.transit_source) as "osrm" | "manual_buffer",
+    transitSource: narrow(w.transit_source, TRANSIT_SOURCES, "watches.transit_source"),
     reschedulable: Boolean(w.reschedulable),
     flightNumber: String(w.flight_number),
     arrivalAirport: w.arrival_airport === null ? null : String(w.arrival_airport),
@@ -221,16 +230,19 @@ export async function loadWatchForView(
     egressMinutesUsed: Number(r.egress_minutes_used),
     marginMinutesUsed: Number(r.margin_minutes_used),
     slackMinutes: r.slack_minutes === null ? null : Number(r.slack_minutes),
-    verdict: String(r.verdict) as Verdict,
-    resultingState: String(r.resulting_state) as WatchState,
+    verdict: narrow(r.verdict, VERDICTS, "prediction_snapshots.verdict"),
+    resultingState: narrow(r.resulting_state, WATCH_STATES, "prediction_snapshots.resulting_state"),
     revision: String(r.revision),
-    firedTransition: r.fired_transition === null ? null : (String(r.fired_transition) as FiredKind),
+    firedTransition:
+      r.fired_transition === null
+        ? null
+        : narrow(r.fired_transition, FIRED_KINDS, "prediction_snapshots.fired_transition"),
   }));
 
   const firedRows: CatchHistoryEntry[] = firedRowsRaw.map((r) => ({
-    kind: String(r.kind) as FiredKind,
+    kind: narrow(r.kind, FIRED_KINDS, "fired_transitions.kind"),
     transition: String(r.transition),
-    deliveryStatus: String(r.delivery_status) as DeliveryStatus,
+    deliveryStatus: narrow(r.delivery_status, DELIVERY_STATUSES, "fired_transitions.delivery_status"),
     leadTimeMinutes: r.lead_time_minutes === null ? null : Number(r.lead_time_minutes),
     usefulLead: r.useful_lead === null ? null : Boolean(r.useful_lead),
     firedAt: r.sent_at === null ? null : toIso(r.sent_at),
@@ -245,15 +257,19 @@ export async function loadWatchForView(
           actualArrivalUtc: calibRows[0].actual_arrival === null ? null : toIso(calibRows[0].actual_arrival),
           divertedToAirport:
             calibRows[0].diverted_to_airport === null ? null : String(calibRows[0].diverted_to_airport),
-          selfReportStatus: String(calibRows[0].self_report_status) as SelfReportStatus,
-          outcome: calibRows[0].outcome === null ? null : (String(calibRows[0].outcome) as Outcome),
+          selfReportStatus: narrow(
+            calibRows[0].self_report_status,
+            SELF_REPORT_STATUSES,
+            "calibration.self_report_status",
+          ),
+          outcome:
+            calibRows[0].outcome === null ? null : narrow(calibRows[0].outcome, OUTCOMES, "calibration.outcome"),
           wasUseful: calibRows[0].was_useful === null ? null : Boolean(calibRows[0].was_useful),
-          enrichmentState: String(calibRows[0].enrichment_state) as EnrichmentState,
+          enrichmentState: narrow(calibRows[0].enrichment_state, ENRICHMENT_STATES, "calibration.enrichment_state"),
         };
 
   return {
     status: "ok",
-    ownerTokenHash: String(w.owner_token_hash),
     watch,
     snapshots,
     firedRows,
@@ -265,4 +281,23 @@ export async function loadWatchForView(
 function toIso(value: unknown): string {
   if (value instanceof Date) return value.toISOString();
   return String(value);
+}
+
+/** Transit-source values for the inline `"osrm" | "manual_buffer"` literal (no named type to reuse). */
+const TRANSIT_SOURCES = ["osrm", "manual_buffer"] as const;
+
+/**
+ * DB-boundary narrowing. Coerce one untyped driver value to a known string-literal union, FAILING
+ * LOUD when it isn't a member. A bare `String(x) as WatchState` lies to the compiler: a renamed or
+ * typo'd enum value (code/schema drift) sails through as a bogus union member and only blows up later
+ * as an unhandled `default` deep in a render path. Checking membership at the one place coercion is
+ * allowed turns that silent drift into a clear, sourced error. `allowed` is the very `as const` array
+ * each union is derived from, so the runtime check can never diverge from the type it guards.
+ */
+export function narrow<T extends string>(value: unknown, allowed: readonly T[], column: string): T {
+  const s = String(value);
+  if ((allowed as readonly string[]).includes(s)) return s as T;
+  throw new Error(
+    `DB boundary: unexpected value ${JSON.stringify(s)} in "${column}"; expected one of [${allowed.join(", ")}].`,
+  );
 }

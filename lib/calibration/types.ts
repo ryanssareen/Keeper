@@ -19,10 +19,23 @@ export interface PredictionSnapshot {
   firedTransition: FiredKind | null;
 }
 
-export type SelfReportStatus = "pending" | "answered" | "dismissed" | "expired" | "no_channel";
-export type Outcome = "made" | "missed" | "changed";
-export type EnrichmentState = "armed" | "awaiting_actual" | "awaiting_self_report" | "sealed";
-export type DeliveryStatus = "attempting" | "sent" | "failed" | "no_device";
+// Each union below is derived from its `as const` array so the array can serve as the single source
+// of truth — reused by the dashboard's DB-boundary `narrow` so the runtime membership check and the
+// compile-time type can never drift apart.
+export const SELF_REPORT_STATUSES = ["pending", "answered", "dismissed", "expired", "no_channel"] as const;
+export type SelfReportStatus = (typeof SELF_REPORT_STATUSES)[number];
+export const OUTCOMES = ["made", "missed", "changed"] as const;
+export type Outcome = (typeof OUTCOMES)[number];
+export const ENRICHMENT_STATES = ["armed", "awaiting_actual", "awaiting_self_report", "sealed"] as const;
+export type EnrichmentState = (typeof ENRICHMENT_STATES)[number];
+/**
+ * Delivery lifecycle of a fired-transition outbox row.
+ * `sending` is the in-flight lease a dispatcher tick holds while calling web-push: a row is claimed
+ * into `sending` atomically (FOR UPDATE SKIP LOCKED) so overlapping ticks never double-send, then
+ * settled to a terminal status — or returned to `attempting` on a transient failure for the next sweep.
+ */
+export const DELIVERY_STATUSES = ["attempting", "sending", "sent", "failed", "no_device"] as const;
+export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 
 /**
  * The outbox row inserted on a firing transition. The (watchId, transition, revision) tuple is the
@@ -36,6 +49,38 @@ export interface FiredTransitionRecord {
   kind: FiredKind;
   leadTimeMinutes: number | null;
   usefulLead: boolean | null;
+}
+
+/**
+ * A claimed outbox row, joined to its watch, that watch's latest prediction snapshot, and the
+ * owning device's newest push subscription. Returned by the SOLE WRITER's `claimFiredTransitions`
+ * so the dispatcher has every fact to render + send WITHOUT a per-row follow-up query (the claim is
+ * the only read). Snapshot and subscription columns are null when none exists yet (advice degrades
+ * gracefully; a null subscription means no_device). Raw snake_case DB column shape on purpose — the
+ * dispatcher is the thin shell that maps it.
+ */
+export interface ClaimedOutboxRow {
+  watch_id: string;
+  transition: string;
+  revision: string;
+  kind: FiredKind;
+  lead_time_minutes: number | null;
+  device_id: string;
+  flight_number: string;
+  place_label: string;
+  reschedulable: boolean;
+  contact: string | null;
+  commitment_zone: string;
+  commitment_instant: Date;
+  predicted_arrival: Date | null;
+  transit_minutes_used: number | null;
+  egress_minutes_used: number | null;
+  margin_minutes_used: number | null;
+  /** Newest subscription for the device (null when the device has none registered). */
+  sub_id: number | null;
+  sub_endpoint: string | null;
+  sub_p256dh: string | null;
+  sub_auth: string | null;
 }
 
 /** One outcome row per watch. outcome/wasUseful are null unless selfReportStatus === "answered". */
@@ -80,6 +125,12 @@ export interface CalibrationWriter {
     revision: string,
     status: DeliveryStatus,
   ): Promise<void>;
+  /** Atomically lease the oldest `attempting` outbox rows to `sending`, enriched for dispatch (U8). */
+  claimFiredTransitions(limit: number): Promise<ClaimedOutboxRow[]>;
+  /** Crash recovery: return `sending` rows older than the TTL to `attempting`; @returns count. */
+  reclaimStuckSending(olderThanMinutes: number): Promise<number>;
+  /** At-least-once retry: return one leased (`sending`) row to `attempting` after a transient failure. */
+  requeueFiredTransition(watchId: string, transition: string, revision: string): Promise<void>;
   backfillActual(watchId: string, actualUtc: string, arrivalAirport: string): Promise<void>;
   recordSelfReport(watchId: string, outcome: Outcome, wasUseful: boolean): Promise<void>;
 }

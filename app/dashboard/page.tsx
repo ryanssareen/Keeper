@@ -1,4 +1,4 @@
-import { verifyToken } from "@/lib/security/capability";
+import { loadAndVerifyWatch } from "@/lib/security/watchGate";
 import { buildWatchView, loadWatchForView } from "@/lib/calibration/dashboard";
 import type {
   CatchHistoryEntry,
@@ -9,16 +9,21 @@ import type {
 import type { DeliveryStatus, SelfReportStatus } from "@/lib/calibration/types";
 import type { FiredKind, Verdict, WatchState } from "@/lib/engine/types";
 import { WatchStatus } from "@/components/WatchStatus";
+import { SelfReportForm, DashboardTokenFallback } from "@/components/SelfReportForm";
+import { formatInZone, formatUtc } from "@/lib/format/time";
 
 /**
  * U10 dashboard (R16, R22) — the in-app mirror and reliability backstop for best-effort push.
  *
  * Renders ONE watch's full lifecycle: live state, resolved place/zone/transit, the catch history
  * (shown first — this is the page a traveler lands on when a push never arrived), and the
- * prediction-snapshot timeline. CAPABILITY-GATED: ?id & ?token come from the URL; we load the
- * watch's owner_token_hash and verify the presented token in constant time. On a missing or wrong
- * token we render a not-authorized view carrying NO watch data. All user text is rendered as React
- * children (auto-escaped) — never dangerouslySetInnerHTML.
+ * prediction-snapshot timeline. CAPABILITY-GATED through the shared watch gate (loadAndVerifyWatch):
+ * ?id & ?token come from the URL; the gate loads the watch and verifies the presented token in
+ * constant time, denying a missing watch and a wrong token IDENTICALLY (no existence oracle). On
+ * denial we render a not-authorized view carrying NO watch data. When ?id is present but the token is
+ * missing or wrong, we also mount a client fallback that resolves the token from localStorage (the
+ * device that armed the watch saved it) and redirects — so a tokenless push deep-link self-heals on
+ * that device. All user text is rendered as React children (auto-escaped) — never dangerouslySetInnerHTML.
  *
  * searchParams is a Promise in Next 16 (Request-time API) and is awaited; reading it opts this page
  * into dynamic rendering, which is correct — it is per-watch, capability-scoped, and never cached.
@@ -32,19 +37,35 @@ export default async function DashboardPage({
   const id = typeof params.id === "string" ? params.id : undefined;
   const token = typeof params.token === "string" ? params.token : undefined;
 
-  if (!id || !token) {
+  // No id at all: nothing to resolve — show the plain "needs a link" gate.
+  if (!id) {
     return <Gate kind="missing" />;
   }
 
-  const loaded = await loadWatchForView(id);
+  // id present but no token (a push deep-link): try to self-heal from localStorage on this device.
+  if (!token) {
+    return <Gate kind="missing" watchIdForFallback={id} />;
+  }
 
-  // Not-found and bad-token both render the gate with NO watch data. We do not distinguish a
-  // missing watch from a wrong token in the copy, so a guesser learns nothing about which it was.
-  if (loaded.status === "not_found" || !verifyToken(token, loaded.ownerTokenHash)) {
-    return <Gate kind="denied" />;
+  // Single capability gate. A missing watch and a wrong token both deny identically (no oracle).
+  const access = await loadAndVerifyWatch(id, token);
+  if (!access.ok) {
+    // The token we were handed is wrong — still offer the localStorage self-heal (it may be stale).
+    return <Gate kind="denied" watchIdForFallback={id} />;
+  }
+
+  // Authorized: load the render data for this now-pre-authorized id (the gate, not this loader,
+  // owns the security check). loadWatchForView no longer reads the token or owner hash.
+  const loaded = await loadWatchForView(id);
+  if (loaded.status === "not_found") {
+    // Raced deletion between the gate and the view load — deny without leaking.
+    return <Gate kind="denied" watchIdForFallback={id} />;
   }
 
   const view = buildWatchView(loaded.watch, loaded.snapshots, loaded.firedRows, loaded.calibration);
+  const showSelfReport =
+    view.outcome !== null &&
+    (view.outcome.selfReportStatus === "pending" || view.outcome.selfReportStatus === "expired");
 
   return (
     <main className="mx-auto w-full max-w-3xl px-5 py-10 font-sans sm:py-14">
@@ -54,6 +75,7 @@ export default async function DashboardPage({
       </div>
       <FactGrid view={view} />
       {view.outcome ? <OutcomeStrip outcome={view.outcome} /> : null}
+      {showSelfReport ? <SelfReportForm watchId={id} token={token} /> : null}
       <CatchHistory entries={view.catchHistory} />
       <Timeline entries={view.timeline} />
       <footer className="mt-12 border-t border-zinc-200 pt-6 text-xs leading-relaxed text-zinc-400 dark:border-zinc-800">
@@ -78,7 +100,7 @@ function Header({ view }: { view: WatchView }): React.ReactElement {
       <p className="mt-1.5 text-sm text-zinc-500">
         Be there by{" "}
         <time dateTime={view.commitmentInstantUtc} className="font-medium text-zinc-700 dark:text-zinc-300">
-          {formatInZone(view.commitmentInstantUtc, view.zone)}
+          {formatInZone(view.commitmentInstantUtc, view.zone, "datetime-24h")}
         </time>{" "}
         <span className="text-zinc-400">({view.zone})</span>
       </p>
@@ -263,14 +285,27 @@ function KindBadge({ kind }: { kind: FiredKind }): React.ReactElement {
   );
 }
 
+// Rendered NON-EXHAUSTIVELY: keyed by the statuses we have copy for, with an in-progress default for
+// anything else. Agent A is adding a "sending" status to DeliveryStatus; this default (plus the
+// explicit "sending" entry) means a new in-flight status renders cleanly instead of crashing on a
+// missing map key — the dashboard must stay a complete record even as the delivery vocabulary grows.
+const DELIVERY_BADGES: Partial<Record<DeliveryStatus, { label: string; cls: string }>> & {
+  [k: string]: { label: string; cls: string } | undefined;
+} = {
+  sent: { label: "Sent", cls: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" },
+  attempting: { label: "Sending…", cls: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" },
+  sending: { label: "Sending…", cls: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" },
+  failed: { label: "Failed", cls: "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300" },
+  no_device: { label: "No device", cls: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300" },
+};
+
+const DELIVERY_DEFAULT = {
+  label: "In progress",
+  cls: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
+};
+
 function DeliveryBadge({ status }: { status: DeliveryStatus }): React.ReactElement {
-  const map: Record<DeliveryStatus, { label: string; cls: string }> = {
-    sent: { label: "Sent", cls: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" },
-    attempting: { label: "Sending…", cls: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" },
-    failed: { label: "Failed", cls: "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300" },
-    no_device: { label: "No device", cls: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300" },
-  };
-  const m = map[status];
+  const m = DELIVERY_BADGES[status] ?? DELIVERY_DEFAULT;
   return <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium ${m.cls}`}>{m.label}</span>;
 }
 
@@ -285,9 +320,18 @@ function VerdictTag({ verdict }: { verdict: Verdict }): React.ReactElement {
 
 /* -------------------------------------------------------------------- gate */
 
-function Gate({ kind }: { kind: "missing" | "denied" }): React.ReactElement {
+function Gate({
+  kind,
+  watchIdForFallback,
+}: {
+  kind: "missing" | "denied";
+  watchIdForFallback?: string;
+}): React.ReactElement {
   return (
     <main className="mx-auto flex min-h-[60vh] w-full max-w-md flex-col items-center justify-center px-6 text-center font-sans">
+      {/* When we have an id but no usable token, try to resolve it from this device's storage and
+          redirect. Renders nothing if no token is stored — the gate copy below stays as the fallback. */}
+      {watchIdForFallback ? <DashboardTokenFallback watchId={watchIdForFallback} /> : null}
       <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-400">Keeper</span>
       <h1 className="mt-3 text-xl font-semibold text-zinc-900 dark:text-zinc-50">Not authorized</h1>
       <p className="mt-2 max-w-sm text-sm leading-relaxed text-zinc-500">
@@ -339,36 +383,4 @@ function outcomeLabel(outcome: OutcomeView): string {
   if (outcome.outcome === "missed") return "Missed";
   if (outcome.outcome === "changed") return "Plans changed";
   return "—";
-}
-
-/** Format a UTC ISO instant in a fixed, locale-stable UTC string (server-rendered, no hydration drift). */
-function formatUtc(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: "UTC",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).format(d) + " UTC";
-}
-
-/** Format a UTC ISO instant in the commitment's own IANA zone (what the traveler actually experiences). */
-function formatInZone(iso: string, zone: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  try {
-    return new Intl.DateTimeFormat("en-GB", {
-      timeZone: zone,
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    }).format(d);
-  } catch {
-    return formatUtc(iso);
-  }
 }

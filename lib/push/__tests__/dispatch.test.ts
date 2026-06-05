@@ -136,12 +136,26 @@ describe("ttlForRow", () => {
   });
 });
 
-describe("classifySendError", () => {
-  it("prunes on 404/410 and not otherwise", () => {
-    expect(classifySendError(404)).toEqual({ status: "failed", prune: true });
-    expect(classifySendError(410)).toEqual({ status: "failed", prune: true });
-    expect(classifySendError(500)).toEqual({ status: "failed", prune: false });
-    expect(classifySendError(undefined)).toEqual({ status: "failed", prune: false });
+describe("classifySendError — 3-way disposition (prune / retry / failed)", () => {
+  it("prunes a permanently-dead endpoint (404/410)", () => {
+    expect(classifySendError(404)).toBe("prune");
+    expect(classifySendError(410)).toBe("prune");
+  });
+
+  it("retries a transient failure: no response, 408, 429, or any 5xx (at-least-once)", () => {
+    expect(classifySendError(undefined)).toBe("retry"); // network/timeout — never reached a response
+    expect(classifySendError(408)).toBe("retry"); // request timeout
+    expect(classifySendError(429)).toBe("retry"); // throttled
+    expect(classifySendError(500)).toBe("retry"); // push service faltered
+    expect(classifySendError(502)).toBe("retry");
+    expect(classifySendError(503)).toBe("retry");
+  });
+
+  it("permanently fails a non-prune client error (other 4xx), without pruning", () => {
+    expect(classifySendError(400)).toBe("failed");
+    expect(classifySendError(401)).toBe("failed");
+    expect(classifySendError(403)).toBe("failed");
+    expect(classifySendError(413)).toBe("failed"); // payload too large — retry won't help
   });
 });
 
@@ -338,5 +352,74 @@ describe.skipIf(!HAS_DB)("dispatchOutbox (integration)", () => {
       SELECT delivery_status, sent_at FROM fired_transitions WHERE watch_id = ${watchId} AND revision = 'rev-1'`;
     expect(ft[0].delivery_status).toBe("sent");
     expect(ft[0].sent_at).not.toBeNull();
+  });
+
+  it("a transient 500 leaves the row attempting (deferred for retry), not failed, and keeps the subscription", async () => {
+    const sql = db();
+    const sendSpy = webpush.sendNotification as unknown as ReturnType<typeof vi.fn>;
+    sendSpy.mockClear();
+    const { watchId, deviceId } = await seed({ withSub: true, suffix: "transient" });
+
+    const emptyHeaders = {} as ConstructorParameters<typeof webpush.WebPushError>[2];
+    // First send (the claim sends exactly one) fails 500; the default mock would resolve any extra.
+    sendSpy.mockRejectedValueOnce(new webpush.WebPushError("boom", 500, emptyHeaders, "", "endpoint"));
+
+    const summary = await dispatchOutbox();
+    expect(summary.deferred).toBeGreaterThanOrEqual(1);
+
+    // Returned to attempting (retryable) — NOT a terminal 'failed', and the lease is cleared.
+    const ft = await sql`
+      SELECT delivery_status, claimed_at, sent_at
+      FROM fired_transitions WHERE watch_id = ${watchId} AND revision = 'rev-1'`;
+    expect(ft[0].delivery_status).toBe("attempting");
+    expect(ft[0].claimed_at).toBeNull();
+    expect(ft[0].sent_at).toBeNull();
+
+    // A transient failure must NOT prune the credential — the endpoint isn't proven dead.
+    const subs = await sql`SELECT id FROM push_subscriptions WHERE device_id = ${deviceId}`;
+    expect(subs.length).toBe(1);
+
+    // Self-isolate: drive the lingering attempting row terminal so it can't bleed into later tests.
+    sendSpy.mockResolvedValueOnce({ statusCode: 201, body: "", headers: {} });
+    await dispatchOutbox();
+    const after = await sql`
+      SELECT delivery_status FROM fired_transitions WHERE watch_id = ${watchId} AND revision = 'rev-1'`;
+    expect(after[0].delivery_status).toBe("sent");
+  });
+
+  it("two concurrent dispatchOutbox() ticks send a given firing exactly once (atomic claim)", async () => {
+    const sql = db();
+    const sendSpy = webpush.sendNotification as unknown as ReturnType<typeof vi.fn>;
+    sendSpy.mockClear();
+    const { watchId } = await seed({ withSub: true, suffix: "concurrent" });
+
+    // Resolve every send, but record which endpoints were hit so we can prove this firing's endpoint
+    // was contacted exactly once across BOTH overlapping ticks. A small delay widens the window in
+    // which both ticks race for the claim (the FOR UPDATE SKIP LOCKED lease must let only one win).
+    const endpointHits: string[] = [];
+    const thisEndpoint = `https://fcm.googleapis.com/fcm/send/${watchId}`;
+    sendSpy.mockImplementation(async (subscription: { endpoint: string }) => {
+      endpointHits.push(subscription.endpoint);
+      await new Promise((r) => setTimeout(r, 25));
+      return { statusCode: 201, body: "", headers: {} };
+    });
+
+    const [a, b] = await Promise.all([dispatchOutbox(), dispatchOutbox()]);
+
+    // Exactly one of the two ticks claimed+sent this firing; the other skipped the leased row.
+    const sentForThis =
+      endpointHits.filter((e) => e === thisEndpoint).length;
+    expect(sentForThis).toBe(1);
+
+    // The row is terminal 'sent' exactly once.
+    const ft = await sql`
+      SELECT delivery_status FROM fired_transitions WHERE watch_id = ${watchId} AND revision = 'rev-1'`;
+    expect(ft[0].delivery_status).toBe("sent");
+
+    // The summaries' claimed counts for this firing sum to 1 (one tick leased it, the other skipped).
+    // (Other ambient rows may inflate the raw totals, so we assert on the endpoint hit count above.)
+    expect(a.sent + b.sent).toBeGreaterThanOrEqual(1);
+
+    sendSpy.mockReset();
   });
 });
