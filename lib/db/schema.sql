@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS watches (
   owner_token_hash    TEXT NOT NULL,                    -- hash of the capability token minted at arm
   flight_number       TEXT NOT NULL,
   flight_date         DATE NOT NULL,
+  arrival_airport     TEXT,                             -- baseline arrival airport (set at arm, for diversion detection)
   commitment_local    TIMESTAMP NOT NULL,               -- wall-clock at the place
   commitment_zone     TEXT NOT NULL,                    -- IANA zone of the geocoded place
   commitment_instant  TIMESTAMPTZ NOT NULL,             -- resolved instant (index/query convenience)
