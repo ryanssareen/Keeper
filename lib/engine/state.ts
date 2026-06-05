@@ -19,7 +19,10 @@ export interface StateOutput {
   recoveryProgress: number;
 }
 
-const TERMINAL: WatchState[] = ["CANCELLED", "DEFINITE_MISS", "LANDED_CAPTURE"];
+/** States from which the watch never reactivates — polling stops and the row seals. */
+export const TERMINAL_STATES: readonly WatchState[] = ["CANCELLED", "DEFINITE_MISS", "LANDED_CAPTURE"];
+
+export const isTerminalState = (state: WatchState): boolean => TERMINAL_STATES.includes(state);
 
 /**
  * Advance the per-watch state machine. Fire on a transition, never on a condition.
@@ -38,7 +41,7 @@ export function step(input: StateInput): StateOutput {
   } = input;
 
   // 0. Terminal states are sticky.
-  if (TERMINAL.includes(current)) {
+  if (isTerminalState(current)) {
     return { next: current, fired: null, recoveryProgress };
   }
 

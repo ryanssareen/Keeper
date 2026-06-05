@@ -26,11 +26,16 @@ CREATE TABLE IF NOT EXISTS watches (
   contact             TEXT,
   state               TEXT NOT NULL,                    -- state-machine state
   revision            TEXT,                             -- data-derived fingerprint of last processed input
+  recovery_progress   INTEGER NOT NULL DEFAULT 0,       -- recovery dwell counter; mutated only inside the row lock
   next_poll_at        TIMESTAMPTZ,
   last_fetched_at     TIMESTAMPTZ,
   terminal            BOOLEAN NOT NULL DEFAULT FALSE,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Additive for databases migrated before recovery_progress existed (CREATE TABLE IF NOT EXISTS won't add columns).
+-- On Postgres 11+ a NOT NULL column with a constant DEFAULT is a metadata-only fast default (no table rewrite).
+ALTER TABLE watches ADD COLUMN IF NOT EXISTS recovery_progress INTEGER NOT NULL DEFAULT 0;
 
 -- Idempotent arm: one active watch per device + flight + commitment.
 CREATE UNIQUE INDEX IF NOT EXISTS watches_dedupe_active
@@ -74,6 +79,11 @@ CREATE TABLE IF NOT EXISTS fired_transitions (
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (watch_id, transition, revision)
 );
+
+-- Dispatcher (U8) claim query: sweep unsent rows across all watches, oldest first. Partial index
+-- keeps it an index-only scan over just the 'attempting' backlog instead of the whole outbox.
+CREATE INDEX IF NOT EXISTS fired_transitions_unsent
+  ON fired_transitions (created_at) WHERE delivery_status = 'attempting';
 
 -- One outcome row per watch. Non-response is explicit, never a sentinel.
 CREATE TABLE IF NOT EXISTS calibration (

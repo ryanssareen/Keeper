@@ -1,4 +1,4 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import {
@@ -13,8 +13,14 @@ import type { PredictionSnapshot } from "@/lib/calibration/types";
 const hasDb = Boolean(process.env.DATABASE_URL);
 
 describe.skipIf(!hasDb)("calibration writer (integration)", () => {
-  const sql = db();
+  // Lazy: acquiring the connection at describe-body level would throw during collection on a
+  // skipped (no-DB) run, defeating skipIf. beforeAll doesn't run for a skipped suite.
+  let sql: ReturnType<typeof db>;
   const created: string[] = [];
+
+  beforeAll(() => {
+    sql = db();
+  });
 
   async function makeWatch(airport = "JFK"): Promise<string> {
     const id = randomUUID();
