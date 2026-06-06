@@ -92,9 +92,13 @@ export function getArmRateLimiter(): Ratelimit | null {
  *
  * Env-absent posture (documented, deliberate):
  *  - In production, the quota-spending routes MUST NOT run un-limited, so a missing Upstash config
- *    FAILS CLOSED (allowed=false) — better to 429 than to expose an unbounded paid surface.
+ *    FAILS CLOSED (allowed=false) by default — better to 429 than to expose an unbounded paid surface.
  *  - In development (`NODE_ENV !== "production"`), there is an explicit BYPASS (allowed=true) so the
  *    app is usable locally without Redis.
+ *  - OPERATOR ESCAPE HATCH: a deploy that knowingly runs without Upstash (e.g. the paid surface is the
+ *    keyless flight simulator, not a metered upstream) can set RATELIMIT_FALLBACK_ALLOW=true to fail
+ *    OPEN instead of closed. This trades IP rate-limiting for availability — configure Upstash for
+ *    real abuse protection rather than relying on this.
  *
  * The actual allow/deny is still derived from the pure `rateLimitDecision` once Upstash returns a
  * count, so the decision logic is uniformly testable.
@@ -103,11 +107,12 @@ export async function checkIpRateLimit(ip: string): Promise<RateLimitOutcome> {
   const limiter = getArmRateLimiter();
 
   // Env-absent OR a transient Upstash failure both apply the same posture: fail-closed in prod (429
-  // beats an unbounded paid surface), dev-bypass locally. Without the catch, an Upstash blip would
-  // throw unhandled in the proxy and 500 every mutating request.
+  // beats an unbounded paid surface) unless the operator opted in via RATELIMIT_FALLBACK_ALLOW, and
+  // dev-bypass locally. Without the catch, an Upstash blip would throw unhandled and 500 every request.
   const fallback = (): RateLimitOutcome => {
-    const devBypass = process.env.NODE_ENV !== "production";
-    return { allowed: devBypass, limit: IP_RATE_LIMIT, remaining: devBypass ? IP_RATE_LIMIT : 0 };
+    const allow =
+      process.env.NODE_ENV !== "production" || process.env.RATELIMIT_FALLBACK_ALLOW === "true";
+    return { allowed: allow, limit: IP_RATE_LIMIT, remaining: allow ? IP_RATE_LIMIT : 0 };
   };
 
   if (!limiter) return fallback();
