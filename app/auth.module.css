@@ -1,5 +1,5 @@
-/* Shared split-layout auth styling for /login and /signup. Email/password only
- * (OAuth dropped per scope), so the .oauth / .or blocks from the design are omitted. */
+/* Shared split-layout auth styling for /login, /signup, /forgot-password and /reset-password.
+ * Covers email/password plus the Google OAuth button (.oauth / .btnOauth) and the "or" divider. */
 
 .auth { display: grid; grid-template-columns: 1fr 1fr; min-height: 100vh; }
 

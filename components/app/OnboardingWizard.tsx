@@ -1,264 +1,410 @@
 "use client";
-
-import { useEffect, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import Link from "next/link";
-import { subscribePush, getDeviceId } from "@/lib/push/client";
-import { upsertWatchToken } from "@/lib/storage/watchTokens";
+import { saveOnboarding, type OnboardingAnswers } from "@/lib/onboarding/actions";
 import s from "@/app/onboarding/onboarding.module.css";
 
-type ArmedWatch = {
-  watchId: string;
-  token: string;
-  state: string;
-  placeLabel: string;
-  zone: string;
-  transitMinutes: number;
-  slackMinutes: number | null;
+const DOTS = [0, 1, 2, 3, 4];
+
+type Answers = OnboardingAnswers;
+
+const DEFAULTS: Answers = {
+  trip: "", party: "2 people", dest: "Lisbon", country: "Portugal", code: "LIS",
+  flight: "", flightNo: "", flightDate: "", hotel: "", hotelName: "", hotelIn: "", hotelOut: "",
 };
 
-const Mark = () => (
-  <svg width="17" height="17" viewBox="0 0 16 16" fill="none">
-    <path d="M13.5 4.5 6 12 2.5 8.5" stroke="#10b981" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
+type City = { city: string; country: string; code: string };
 
-const Glyph = ({ ring = "#71717a" }: { ring?: string }) => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-    <circle cx="8" cy="8" r="1.6" fill="#fff" />
-    <path d="M8 4.2a3.8 3.8 0 0 1 3.8 3.8" stroke="#fff" strokeWidth="1.3" strokeLinecap="round" />
-    <path d="M8 1.7a6.3 6.3 0 0 1 6.3 6.3" stroke={ring} strokeWidth="1.3" strokeLinecap="round" />
-  </svg>
-);
+const CITIES: City[] = [
+  { city: "Lisbon", country: "Portugal", code: "LIS" },
+  { city: "London", country: "United Kingdom", code: "LHR" },
+  { city: "Los Angeles", country: "United States", code: "LAX" },
+  { city: "Tokyo", country: "Japan", code: "HND" },
+  { city: "Toronto", country: "Canada", code: "YYZ" },
+  { city: "Barcelona", country: "Spain", code: "BCN" },
+  { city: "Bangkok", country: "Thailand", code: "BKK" },
+  { city: "Berlin", country: "Germany", code: "BER" },
+  { city: "Mexico City", country: "Mexico", code: "MEX" },
+  { city: "Marrakesh", country: "Morocco", code: "RAK" },
+  { city: "Cape Town", country: "South Africa", code: "CPT" },
+  { city: "Copenhagen", country: "Denmark", code: "CPH" },
+  { city: "New York", country: "United States", code: "JFK" },
+  { city: "Paris", country: "France", code: "CDG" },
+  { city: "Porto", country: "Portugal", code: "OPO" },
+  { city: "Rome", country: "Italy", code: "FCO" },
+  { city: "Reykjavik", country: "Iceland", code: "KEF" },
+  { city: "Singapore", country: "Singapore", code: "SIN" },
+  { city: "Sydney", country: "Australia", code: "SYD" },
+  { city: "Seoul", country: "South Korea", code: "ICN" },
+  { city: "Istanbul", country: "Turkey", code: "IST" },
+  { city: "Amsterdam", country: "Netherlands", code: "AMS" },
+  { city: "Athens", country: "Greece", code: "ATH" },
+  { city: "Buenos Aires", country: "Argentina", code: "EZE" },
+];
 
-export function OnboardingWizard(): React.ReactElement {
-  const [step, setStep] = useState(0);
-  const [flightNumber, setFlightNumber] = useState("");
-  const [flightDate, setFlightDate] = useState("");
-  const [placeQuery, setPlaceQuery] = useState("");
-  const [commitmentLocal, setCommitmentLocal] = useState("");
-  const [marginMinutes, setMarginMinutes] = useState("15");
-  const [contact, setContact] = useState("");
-  const [reschedulable, setReschedulable] = useState(true);
+const cx = (...c: Array<string | false | undefined>): string => c.filter(Boolean).join(" ");
 
-  const [arming, setArming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [armed, setArmed] = useState<ArmedWatch | null>(null);
-  const [pushStatus, setPushStatus] = useState<"idle" | "working" | "subscribed" | "denied" | "error" | "unsupported">("idle");
+export function OnboardingWizard({
+  initialAnswers,
+  initialStep,
+}: {
+  initialAnswers?: Partial<Answers>;
+  initialStep?: number;
+}): React.ReactElement {
+  const [step, setStep] = useState(initialStep ?? 0);
+  const [answers, setAnswers] = useState<Answers>({ ...DEFAULTS, ...initialAnswers });
+  const [showCustom, setShowCustom] = useState(false);
+  const [destQuery, setDestQuery] = useState(
+    initialAnswers?.dest && initialAnswers?.country
+      ? `${initialAnswers.dest}, ${initialAnswers.country}`
+      : "",
+  );
+  const [suggestions, setSuggestions] = useState<City[]>([]);
+  const [cursor, setCursor] = useState(-1);
+  const [destChosen, setDestChosen] = useState(Boolean(initialAnswers?.dest));
+  const customRef = useRef<HTMLInputElement>(null);
+  const answersRef = useRef(answers);
 
-  useEffect(() => {
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+  const go = useCallback((i: number) => {
+    setStep(i);
+    window.scrollTo({ top: 0, behavior: "instant" });
+    saveOnboarding(answersRef.current, i, i >= 5).catch(() => {});
   }, []);
 
-  function goFlight() {
-    if (!flightNumber.trim() || !flightDate) {
-      setError("Enter the flight number and date.");
-      return;
-    }
-    setError(null);
-    setStep(1);
-  }
+  const set = (patch: Partial<Answers>) =>
+    setAnswers((a) => {
+      const next = { ...a, ...patch };
+      answersRef.current = next;
+      return next;
+    });
 
-  async function armNow() {
-    if (!placeQuery.trim() || !commitmentLocal) {
-      setError("Tell us where you need to be and by when.");
-      return;
-    }
-    setArming(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/watch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          deviceId: getDeviceId(),
-          flightNumber: flightNumber.trim().toUpperCase(),
-          flightDate,
-          placeQuery: placeQuery.trim(),
-          commitmentLocal,
-          reschedulable,
-          marginMinutes: Number(marginMinutes) || 15,
-          contact: contact.trim() || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Couldn’t arm the watch.");
-        return;
-      }
-      localStorage.setItem(
-        "keeper-watches",
-        upsertWatchToken(localStorage.getItem("keeper-watches"), data.watchId, data.token),
-      );
-      setArmed(data);
-      setStep(2);
-    } catch {
-      setError("Network error — try again.");
-    } finally {
-      setArming(false);
-    }
-  }
+  const pickTrip = (value: string) => { set({ trip: value }); window.setTimeout(() => go(1), 360); };
+  const pickParty = (value: string) => { setShowCustom(false); set({ party: value }); window.setTimeout(() => go(2), 360); };
+  const toggleCustom = () => { setShowCustom(true); window.setTimeout(() => customRef.current?.focus(), 0); };
+  const setCustom = (raw: string) => { const n = parseInt(raw, 10); if (n > 0) set({ party: `${n} ${n === 1 ? "person" : "people"}` }); };
 
-  async function enableNotifs() {
-    setPushStatus("working");
-    const result = await subscribePush();
-    setPushStatus(result);
-    if (result === "subscribed") setTimeout(() => setStep(3), 600);
-  }
+  const filterDest = (value: string) => {
+    setDestQuery(value);
+    const q = value.trim().toLowerCase();
+    if (!q) { setSuggestions([]); setCursor(-1); return; }
+    setSuggestions(
+      CITIES.filter(
+        (c) => c.city.toLowerCase().startsWith(q) || c.country.toLowerCase().startsWith(q) || c.code.toLowerCase() === q,
+      ).slice(0, 6),
+    );
+    setCursor(-1);
+  };
+
+  const chooseDest = (c: City) => {
+    set({ dest: c.city, country: c.country, code: c.code });
+    setDestQuery(`${c.city}, ${c.country}`);
+    setSuggestions([]); setDestChosen(true);
+  };
+
+  const destKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!suggestions.length) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); setCursor((i) => Math.min(i + 1, suggestions.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setCursor((i) => Math.max(i - 1, 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); if (cursor >= 0) chooseDest(suggestions[cursor]!); }
+  };
+
+  const recapFlight = answers.flight === "Booked" && answers.flightNo
+    ? `Booked · ${answers.flightNo}`
+    : answers.flight || "Not added";
+  const recapHotel = answers.hotel === "Booked" && answers.hotelName
+    ? `Booked · ${answers.hotelName}`
+    : answers.hotel || "Not added";
 
   return (
     <div className={s.obWrap}>
       <div className={s.stepsBar}>
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className={`${s.sdot} ${i < step ? s.done : i === step ? s.active : ""}`}>
+        {DOTS.map((i) => (
+          <div key={i} className={cx(s.sdot, i === step && s.active, i < step && s.done)}>
             <span className={s.fill} />
           </div>
         ))}
       </div>
 
-      {/* Step 1: flight */}
-      {step === 0 ? (
-        <section className={s.obStep}>
-          <span className={s.stepLabel}>Step 1 of 4 · The flight</span>
-          <h1>What flight are we watching?</h1>
-          <p className={s.lede}>This is the thing that moves. When it slips, Keeper re-checks everything you’ve hung off it.</p>
-          <div className={s.cardForm}>
-            <div className={s.two}>
-              <div>
-                <label className="field-label" htmlFor="fn">Flight number</label>
-                <input className="field mono" id="fn" placeholder="EK 9" value={flightNumber} onChange={(e) => setFlightNumber(e.target.value)} />
-              </div>
-              <div>
-                <label className="field-label" htmlFor="fd">Flight date</label>
-                <input className="field" id="fd" type="date" value={flightDate} onChange={(e) => setFlightDate(e.target.value)} />
-              </div>
-            </div>
-            <p className="field-hint" style={{ marginTop: -6 }}>We’ll resolve the route, the live arrival airport, and the gate-to-door time automatically.</p>
-          </div>
-          {error ? <p className={s.err}>{error}</p> : null}
-          <div className={s.obActions}>
-            <button className="btn btn-primary btn-lg" style={{ flex: 1 }} onClick={goFlight}>Continue</button>
-          </div>
-        </section>
-      ) : null}
+      {/* Step 1 — trip intent */}
+      <section className={cx(s.obStep, step === 0 && s.active)}>
+        <QHead title="Hi! Do you have any trips coming up?" />
+        <p className={s.qLede}>We&apos;ll help you keep every booking, document, and plan in one calm place.</p>
+        <div className={cx(s.opts, s.two)}>
+          <Opt icon={<PlaneIcon />} title="Yes, I do" sub="Let's set it up together" selected={answers.trip === "Yes"} onClick={() => pickTrip("Yes")} />
+          <Opt icon={<CompassIcon />} title="No, just exploring" sub="Show me around first" selected={answers.trip === "Just exploring"} onClick={() => pickTrip("Just exploring")} />
+        </div>
+      </section>
 
-      {/* Step 2: commitment */}
-      {step === 1 ? (
-        <section className={s.obStep}>
-          <span className={s.stepLabel}>Step 2 of 4 · The commitment</span>
-          <h1>What’s downstream of it?</h1>
-          <p className={s.lede}>The one thing that has to happen after you land. Resolve it to a place and a time, and the engine can collide-check it.</p>
-          <div className={s.cardForm}>
+      {/* Step 2 — party size */}
+      <section className={cx(s.obStep, step === 1 && s.active)}>
+        <QHead title="How many people are going?" />
+        <p className={s.qLede}>This shapes your checklist and how we organize documents for everyone.</p>
+        <div className={cx(s.opts, s.three)}>
+          {(["Solo", "2 people", "Family", "Group"] as const).map((label, i) => (
+            <Opt
+              key={label}
+              title={label}
+              sub={["Just me", "A pair", "With kids", "Friends / team"][i]!}
+              selected={!showCustom && answers.party === label}
+              onClick={() => pickParty(label)}
+            />
+          ))}
+          <Opt title="Custom number" sub="Tell us exactly" selected={showCustom} onClick={toggleCustom} style={{ gridColumn: "span 2" }} />
+        </div>
+        <div className={cx(s.customWrap, showCustom && s.show)}>
+          <div className={s.opts} style={{ marginTop: 14 }}>
             <div>
-              <label className="field-label" htmlFor="pl">Where do you need to be?</label>
-              <input className="field" id="pl" placeholder="Trafalgar Square, London" value={placeQuery} onChange={(e) => setPlaceQuery(e.target.value)} />
+              <label className="field-label" htmlFor="customNum">How many travelers?</label>
+              <input
+                ref={customRef} className="field" id="customNum" type="number" min={1} max={40}
+                placeholder="e.g. 7"
+                onInput={(e) => setCustom(e.currentTarget.value)}
+              />
             </div>
-            <div className={s.two}>
+          </div>
+        </div>
+        <div className={s.obActions}>
+          <button type="button" className={cx("btn btn-ghost btn-lg", s.btnBack)} onClick={() => go(0)}>Back</button>
+          <button type="button" className="btn btn-primary btn-lg" style={{ flex: 1 }} onClick={() => go(2)}>Continue</button>
+        </div>
+      </section>
+
+      {/* Step 3 — destination */}
+      <section className={cx(s.obStep, step === 2 && s.active)}>
+        <QHead title="Where are you going?" />
+        <p className={s.qLede}>Start typing a city and pick from the list. We&apos;ll tailor recommendations to it.</p>
+        <div className={s.searchBlock}>
+          <div className={s.searchField}>
+            <span className={s.mag}><MagIcon /></span>
+            <input
+              className={s.searchInput} type="text" autoComplete="off"
+              placeholder="Search a destination…" value={destQuery}
+              onChange={(e) => filterDest(e.target.value)}
+              onFocus={(e) => filterDest(e.target.value)}
+              onKeyDown={destKey}
+            />
+          </div>
+          <div className={cx(s.suggest, suggestions.length > 0 && s.show)}>
+            {suggestions.map((c, i) => (
+              <div
+                key={c.code}
+                className={cx(s.sg, cursor === i && s.cur)}
+                onMouseDown={(e) => { e.preventDefault(); chooseDest(c); }}
+              >
+                <span className={s.pin}><PinIcon /></span>
+                <div>
+                  <div className={s.city}>{c.city}</div>
+                  <div className={s.country}>{c.country}</div>
+                </div>
+                <span className={s.code}>{c.code}</span>
+              </div>
+            ))}
+          </div>
+          <div className={s.popRow}>
+            <span className={s.pl}>Popular right now</span>
+            {[
+              { city: "Lisbon", country: "Portugal", code: "LIS" },
+              { city: "Tokyo", country: "Japan", code: "HND" },
+              { city: "Mexico City", country: "Mexico", code: "MEX" },
+              { city: "Barcelona", country: "Spain", code: "BCN" },
+              { city: "Cape Town", country: "South Africa", code: "CPT" },
+            ].map((c) => (
+              <button key={c.code} type="button" className={s.chip} onClick={() => chooseDest(c)}>{c.city}</button>
+            ))}
+          </div>
+        </div>
+        <div className={s.obActions}>
+          <button type="button" className={cx("btn btn-ghost btn-lg", s.btnBack)} onClick={() => go(1)}>Back</button>
+          <button type="button" className="btn btn-primary btn-lg" style={{ flex: 1 }} disabled={!destChosen} onClick={() => go(3)}>Continue</button>
+        </div>
+      </section>
+
+      {/* Step 4 — flight */}
+      <section className={cx(s.obStep, step === 3 && s.active)}>
+        <QHead title="Do you have a flight booked?" />
+        <p className={s.qLede}>If you do, add the flight number and we&apos;ll keep your times handy. No pressure if not.</p>
+        <div className={cx(s.opts, s.three)}>
+          <Opt stack icon={<PlaneIcon />} title="Yes" sub="It's booked" selected={answers.flight === "Booked"} onClick={() => set({ flight: "Booked" })} />
+          <Opt stack icon={<ClockIcon />} title="No" sub="Not yet" selected={answers.flight === "Not yet"} onClick={() => set({ flight: "Not yet" })} />
+          <Opt stack icon={<QuestionIcon />} title="Still deciding" sub="Weighing options" selected={answers.flight === "Still deciding"} onClick={() => set({ flight: "Still deciding" })} />
+        </div>
+        <div className={cx(s.detailReveal, answers.flight === "Booked" && s.show)}>
+          <div className={s.revealCard}>
+            <span className={s.rcLabel}><PlaneIcon size={14} />Your flight</span>
+            <div className={s.twoCol}>
               <div>
-                <label className="field-label" htmlFor="by">By when (local)</label>
-                <input className="field" id="by" type="datetime-local" value={commitmentLocal} onChange={(e) => setCommitmentLocal(e.target.value)} />
+                <label className="field-label" htmlFor="fNo">Flight number</label>
+                <input className="field mono" id="fNo" placeholder="e.g. TP 209" value={answers.flightNo} onChange={(e) => set({ flightNo: e.target.value })} />
               </div>
               <div>
-                <label className="field-label" htmlFor="mg">Arrival margin</label>
-                <select className="field" id="mg" value={marginMinutes} onChange={(e) => setMarginMinutes(e.target.value)}>
-                  <option value="10">10 minutes</option>
-                  <option value="15">15 minutes</option>
-                  <option value="30">30 minutes</option>
-                  <option value="45">45 minutes</option>
-                  <option value="60">1 hour</option>
-                </select>
+                <label className="field-label" htmlFor="fDate">Departure date</label>
+                <input className="field" id="fDate" type="date" value={answers.flightDate} onChange={(e) => set({ flightDate: e.target.value })} />
               </div>
             </div>
+          </div>
+        </div>
+        <div className={s.obActions}>
+          <button type="button" className={cx("btn btn-ghost btn-lg", s.btnBack)} onClick={() => go(2)}>Back</button>
+          <button type="button" className="btn btn-primary btn-lg" style={{ flex: 1 }} onClick={() => go(4)}>Continue</button>
+        </div>
+      </section>
+
+      {/* Step 5 — hotel */}
+      <section className={cx(s.obStep, step === 4 && s.active)}>
+        <QHead title="Do you have a hotel booking?" />
+        <p className={s.qLede}>We&apos;ll store your reservation and check-in details next to everything else.</p>
+        <div className={cx(s.opts, s.three)}>
+          <Opt stack icon={<HotelIcon />} title="Yes" sub="It's booked" selected={answers.hotel === "Booked"} onClick={() => set({ hotel: "Booked" })} />
+          <Opt stack icon={<ClockIcon />} title="No" sub="Not yet" selected={answers.hotel === "Not yet"} onClick={() => set({ hotel: "Not yet" })} />
+          <Opt stack icon={<SearchSmallIcon />} title="Looking" sub="Help me find one" selected={answers.hotel === "Looking for one"} onClick={() => set({ hotel: "Looking for one" })} />
+        </div>
+        <div className={cx(s.detailReveal, answers.hotel === "Booked" && s.show)}>
+          <div className={s.revealCard}>
+            <span className={s.rcLabel}><HotelIcon size={14} />Your stay</span>
             <div>
-              <label className="field-label" htmlFor="ct">Who to contact if it slips <span style={{ color: "var(--text-faint)", fontWeight: 400 }}>(optional)</span></label>
-              <input className="field" id="ct" placeholder="The venue" value={contact} onChange={(e) => setContact(e.target.value)} />
+              <label className="field-label" htmlFor="hName">Hotel name</label>
+              <input className="field" id="hName" placeholder="e.g. Alfama Terrace" value={answers.hotelName} onChange={(e) => set({ hotelName: e.target.value })} />
             </div>
-            <div className={s.toggleRow}>
-              <div className={s.tl}><b>This commitment can be moved</b><p>Reschedulable items get gentler advice — push, don’t panic.</p></div>
-              <label className={s.sw}><input type="checkbox" checked={reschedulable} onChange={(e) => setReschedulable(e.target.checked)} /><span className={s.slider} /></label>
-            </div>
-          </div>
-          {error ? <p className={s.err}>{error}</p> : null}
-          <div className={s.obActions}>
-            <button className="btn btn-ghost btn-lg" onClick={() => { setError(null); setStep(0); }}>Back</button>
-            <button className="btn btn-primary btn-lg" style={{ flex: 1 }} onClick={armNow} disabled={arming}>
-              {arming ? "Arming…" : "Arm watch"}
-            </button>
-          </div>
-        </section>
-      ) : null}
-
-      {/* Step 3: notifications */}
-      {step === 2 ? (
-        <section className={s.obStep}>
-          <span className={s.stepLabel}>Step 3 of 4 · Get the catch</span>
-          <h1>Turn on the one notification that matters.</h1>
-          <p className={s.lede}>Keeper stays silent until something breaks. Enable notifications so the catch reaches you in time to act.</p>
-          <div className={s.notifCard}>
-            <div className={s.notifPreview}>
-              <div className={s.npToast}>
-                <span className={s.ai}><Glyph ring="#a1a1aa" /></span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center" }}><span className={s.nm}>Keeper</span><span className={s.tm}>now</span></div>
-                  <div className={s.bd}><b>Heads up — predicted to miss dinner.</b> EK 9 is 90 min late. Push the table to 20:15. 41 min lead.</div>
-                </div>
+            <div className={s.twoCol}>
+              <div>
+                <label className="field-label" htmlFor="hIn">Check-in</label>
+                <input className="field" id="hIn" type="date" value={answers.hotelIn} onChange={(e) => set({ hotelIn: e.target.value })} />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="hOut">Check-out</label>
+                <input className="field" id="hOut" type="date" value={answers.hotelOut} onChange={(e) => set({ hotelOut: e.target.value })} />
               </div>
             </div>
-            <div className={s.perks}>
-              <div className={s.perk}><Mark />One alert per break — never a stream of noise</div>
-              <div className={s.perk}><Mark />Delivered the moment slack goes negative</div>
-              <div className={s.perk}><Mark />Mirrored on your dashboard if a push ever slips</div>
-            </div>
-            <button className="btn btn-primary btn-lg btn-block" style={{ marginTop: 22 }} onClick={enableNotifs} disabled={pushStatus === "working" || pushStatus === "subscribed"}>
-              {pushStatus === "subscribed" ? "Notifications on" : pushStatus === "working" ? "Enabling…" : "Enable notifications"}
-            </button>
-            {pushStatus === "denied" ? <p className="field-hint" style={{ textAlign: "center", marginTop: 10, color: "var(--amber-600)" }}>Notifications are blocked. Enable them for this site in your browser settings.</p> : null}
-            {pushStatus === "unsupported" ? <p className="field-hint" style={{ textAlign: "center", marginTop: 10 }}>On iPhone, add Keeper to your Home Screen first — push only reaches installed apps.</p> : null}
-            {pushStatus === "error" ? <p className="field-hint" style={{ textAlign: "center", marginTop: 10, color: "var(--red-600)" }}>Couldn’t enable notifications — you can do it later in Settings.</p> : null}
           </div>
-          <div className={s.obActions}>
-            <button className="btn btn-secondary btn-lg" style={{ flex: 1 }} onClick={() => setStep(3)}>I’ll do this later</button>
-          </div>
-        </section>
-      ) : null}
+        </div>
+        <p className={s.obNote}>Hotel integrations are coming soon — for now we&apos;ll keep your details organized.</p>
+        <div className={s.obActions}>
+          <button type="button" className={cx("btn btn-ghost btn-lg", s.btnBack)} onClick={() => go(3)}>Back</button>
+          <button type="button" className="btn btn-primary btn-lg" style={{ flex: 1 }} onClick={() => go(5)}>Continue</button>
+        </div>
+      </section>
 
-      {/* Step 4: confirm */}
-      {step === 3 ? (
-        <section className={s.obStep}>
-          <div className={s.confirmHero}>
-            <div className={s.confirmRing}><svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></div>
-            <span className={s.stepLabel}>Watch armed</span>
-            <h1 style={{ marginTop: 10 }}>You’re covered. Go enjoy the trip.</h1>
-            <p className={s.lede} style={{ maxWidth: "36ch", marginInline: "auto" }}>
-              Keeper is watching {armed?.placeLabel ? `for your arrival at ${armed.placeLabel}` : "your trip"}. We’ll only reach out if something breaks.
-            </p>
+      {/* Confirm */}
+      <section className={cx(s.obStep, step === 5 && s.active)}>
+        <div className={s.confirmHero}>
+          <div className={s.confirmRing}>
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
+              <path d="M20 6 9 17l-5-5" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </div>
-          {armed ? (
-            <div className={s.armedCard}>
-              <div className={s.armedTop}><span className="k-label">Keeper · watch</span><span className="pill pill-ok pill-dot">Armed</span></div>
-              <div className={s.armedBody}>
-                <div className={s.armedRoute}>{flightNumber.toUpperCase()} <span className={s.arr}>→</span> {armed.placeLabel}</div>
-                <div className={s.armedWhen}>Watching against your <b>{commitmentLocal.replace("T", " ")}</b> commitment · {armed.zone}</div>
-                <div className={s.armedFacts}>
-                  <div className={s.f}><span className="k-label">Slack</span><div className={s.v} style={{ color: (armed.slackMinutes ?? 0) < 0 ? "var(--red-600)" : "var(--emerald-600)" }}>{fmtSlack(armed.slackMinutes)}</div></div>
-                  <div className={s.f}><span className="k-label">Airport → place</span><div className={s.v}>{armed.transitMinutes} min</div></div>
-                  <div className={s.f}><span className="k-label">Margin</span><div className={s.v}>{marginMinutes} min</div></div>
-                </div>
-              </div>
-            </div>
-          ) : null}
-          <div className={s.obActions}>
-            <Link className="btn btn-primary btn-lg" style={{ flex: 1 }} href="/dashboard">Go to dashboard</Link>
+          <span className={s.qWho}>All set</span>
+          <h1>Your trip to {answers.dest} is ready</h1>
+          <p>Everything lives in one place now. You can add bookings, documents, and plans any time.</p>
+        </div>
+        <div className={s.recap}>
+          <div className={s.recapTop}>
+            <span className={s.recapDest}>{answers.dest}, {answers.country}</span>
+            <span className="pill pill-ok pill-dot">On track</span>
           </div>
-        </section>
-      ) : null}
+          <dl className={s.recapGrid}>
+            <div className={s.recapCell}><dt>Travelers</dt><dd>{answers.party}</dd></div>
+            <div className={s.recapCell}><dt>Destination</dt><dd>{answers.code}</dd></div>
+            <div className={s.recapCell}><dt>Flight</dt><dd>{recapFlight}</dd></div>
+            <div className={s.recapCell}><dt>Hotel</dt><dd>{recapHotel}</dd></div>
+          </dl>
+        </div>
+        <div className={cx(s.obActions, s.confirmActions)}>
+          <Link className="btn btn-primary btn-lg btn-block" href="/dashboard">Open my trip</Link>
+        </div>
+      </section>
     </div>
   );
 }
 
-function fmtSlack(min: number | null): string {
-  if (min === null) return "—";
-  const sign = min < 0 ? "−" : "+";
-  const abs = Math.abs(min);
-  if (abs >= 60) return `${sign}${Math.floor(abs / 60)}h ${abs % 60}m`;
-  return `${sign}${abs}m`;
+function QHead({ title }: { title: string }): React.ReactElement {
+  return (
+    <div className={s.qHead}>
+      <span className={s.qAvatar} aria-hidden><KeeperGlyph /></span>
+      <div>
+        <span className={s.qWho}>Keeper</span>
+        <h1>{title}</h1>
+      </div>
+    </div>
+  );
 }
+
+function Opt({ title, sub, selected, onClick, icon, stack, style }: {
+  title: string; sub: string; selected: boolean; onClick: () => void;
+  icon?: React.ReactNode; stack?: boolean; style?: React.CSSProperties;
+}): React.ReactElement {
+  return (
+    <button type="button" className={cx(s.opt, stack && s.stack, selected && s.sel)} style={style} onClick={onClick}>
+      {icon ? <span className={s.oIco}>{icon}</span> : null}
+      <span className={s.oTxt}><b>{title}</b><span>{sub}</span></span>
+      <span className={s.oCheck}>
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+          <path d="M13.5 4.5 6 12 2.5 8.5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
+    </button>
+  );
+}
+
+const KeeperGlyph = (): React.ReactElement => (
+  <svg width="20" height="20" viewBox="0 0 16 16" fill="none">
+    <circle cx="8" cy="8" r="1.6" fill="#fff" />
+    <path d="M8 4.2a3.8 3.8 0 0 1 3.8 3.8" stroke="#fff" strokeWidth="1.3" strokeLinecap="round" />
+    <path d="M8 1.7a6.3 6.3 0 0 1 6.3 6.3" stroke="#a1a1aa" strokeWidth="1.3" strokeLinecap="round" />
+  </svg>
+);
+
+const PlaneIcon = ({ size = 20 }: { size?: number }): React.ReactElement => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+    <path d="M3 11l14-5-4.5 9.5-2.2-4.8L3 11Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+  </svg>
+);
+
+const CompassIcon = (): React.ReactElement => (
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+    <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M10 3v2M10 15v2M3 10h2M15 10h2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <circle cx="10" cy="10" r="1.4" fill="currentColor" />
+  </svg>
+);
+
+const ClockIcon = (): React.ReactElement => (
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+    <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M10 6v4l2.5 1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const QuestionIcon = (): React.ReactElement => (
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+    <path d="M7 8a3 3 0 1 1 4 2.8c-.7.3-1 .8-1 1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <circle cx="10" cy="15" r="1" fill="currentColor" />
+  </svg>
+);
+
+const HotelIcon = ({ size = 20 }: { size?: number }): React.ReactElement => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+    <path d="M3 16V6l7-3 7 3v10" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+    <path d="M8 16v-4h4v4" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+  </svg>
+);
+
+const SearchSmallIcon = (): React.ReactElement => (
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+    <circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.4" />
+    <path d="m13 13 3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+);
+
+const MagIcon = (): React.ReactElement => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+    <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.5" />
+    <path d="m12.5 12.5 3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+);
+
+const PinIcon = (): React.ReactElement => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <path d="M8 14s5-4.2 5-8A5 5 0 0 0 3 6c0 3.8 5 8 5 8Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+    <circle cx="8" cy="6" r="1.6" stroke="currentColor" strokeWidth="1.3" />
+  </svg>
+);

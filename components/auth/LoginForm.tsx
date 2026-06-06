@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { signIn, type AuthState } from "@/lib/auth/actions";
 import { GoogleButton } from "@/components/auth/GoogleButton";
 import s from "@/app/auth.module.css";
@@ -35,7 +36,7 @@ export function LoginForm({ next, errorKind }: { next?: string; errorKind?: stri
         <div>
           <div className={s.rowBetween}>
             <label className="field-label" htmlFor="password" style={{ margin: 0 }}>Password</label>
-            <a href="#">Forgot?</a>
+            <Link href="/forgot-password">Forgot?</Link>
           </div>
           <input className="field" id="password" name="password" type="password" placeholder="••••••••" autoComplete="current-password" required />
         </div>
