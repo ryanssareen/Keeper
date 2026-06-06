@@ -1,0 +1,31 @@
+# Supabase config for the Keeper project (ref: jfugphririivjrwdbfmv).
+# Pushed to the linked remote with `supabase config push`. The Google client
+# secret is supplied at push time via the SUPABASE_AUTH_GOOGLE_SECRET env var —
+# it is never written into this file (which is committed to the repo).
+project_id = "keeper"
+
+[auth]
+site_url = "http://localhost:3000"
+# Allow the local dev app + Vercel preview/prod to receive the OAuth redirect.
+additional_redirect_urls = [
+  "http://localhost:3000/**",
+  "https://*.vercel.app/**",
+]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = true
+enable_anonymous_sign_ins = false
+
+[auth.email]
+enable_signup = true
+# Auto-confirm email signups so signup → onboarding is instant (no email step),
+# matching the design flow. Flip to true to require email confirmation.
+enable_confirmations = false
+double_confirm_changes = true
+
+[auth.external.google]
+enabled = true
+client_id = "7331907591-jrgh7k581jb3gbsg5ibirlkbd6rgamkk.apps.googleusercontent.com"
+secret = "env(SUPABASE_AUTH_GOOGLE_SECRET)"
+skip_nonce_check = false
