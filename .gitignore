@@ -37,6 +37,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# supabase CLI local state/cache
+supabase/.temp
+supabase/.branches
+
 # ce-work parallel subagent worktrees
 .claude/worktrees/
 

@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
-import { fetchFlight } from "@/lib/adapters/aerodatabox";
+import { fetchFlight } from "@/lib/adapters/flight";
 import { geocodeAirport, resolvePlace } from "@/lib/adapters/osm";
 import { mintToken, hashToken } from "@/lib/security/capability";
+import { withinWatchCap, budgetOk } from "@/lib/security/ratelimit";
 import { appendSnapshot } from "@/lib/calibration/writer";
 import { detectCollision } from "./collision";
 import { validateArm } from "./validation";
@@ -19,6 +20,12 @@ export interface ArmRequest {
   reschedulable: boolean;
   marginMinutes?: number;
   contact?: string | null;
+  /**
+   * Owning account (Supabase auth.users.id), or null when armed logged-out. NEVER taken from client
+   * input — the route resolves it from the verified session — so a caller can't claim another user's
+   * id. Recorded on the watch so the dashboard can list "my watches".
+   */
+  userId?: string | null;
 }
 
 export interface ArmedWatch {
@@ -36,11 +43,57 @@ export interface ArmedWatch {
 export type ArmResult = { ok: true; watch: ArmedWatch } | { ok: false; reason: string };
 
 /**
+ * Read the configured monthly budget threshold from env, or null when the breaker is DISABLED.
+ *
+ * `MONTHLY_BUDGET_UNITS` is the per-calendar-month ceiling on the spend proxy below. When it is
+ * unset, non-numeric, or non-positive, the budget circuit-breaker is simply OFF (returns null) — we
+ * do NOT fail closed and reject every arm; an unconfigured budget means "no budget enforced", not
+ * "spend is zero". Only a positive value arms the gate.
+ */
+function monthlyBudgetThreshold(): number | null {
+  const raw = process.env.MONTHLY_BUDGET_UNITS;
+  if (raw === undefined) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * Month-to-date spend PROXY (thin DB IO): the number of watches created this calendar month.
+ *
+ * Each armed watch is the unit that drives recurring upstream polling spend, so "watches created
+ * since the start of this month (server clock)" is a cheap, monotonic stand-in for upstream cost
+ * until a real per-call meter exists. Counted off `created_at` (UTC `date_trunc('month', now())`),
+ * so the window resets automatically at each month boundary. Reads only — never mutates.
+ */
+async function monthToDateSpend(): Promise<number> {
+  const sql = db();
+  const rows = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM watches WHERE created_at >= date_trunc('month', now())`;
+  return rows[0].n;
+}
+
+/**
  * Arm a watch: fetch the flight, resolve the place + transit, validate, compute the baseline
  * verdict, and persist {watch + calibration} atomically with an owner capability token (U5).
  * Adapter calls happen BEFORE the transaction so a flaky upstream can't leave a half-armed watch.
  */
 export async function armWatch(req: ArmRequest, nowUtc: string): Promise<ArmResult> {
+  // 0. Per-device active-watch cap (R24) — refuse BEFORE paying for any upstream lookup.
+  const sql = db();
+  const capRows = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM watches WHERE device_id = ${req.deviceId} AND terminal = FALSE`;
+  if (!withinWatchCap(capRows[0].n)) {
+    return { ok: false, reason: "You've reached the maximum number of active watches on this device." };
+  }
+
+  // 0b. Monthly-spend circuit-breaker (R24) — also BEFORE any upstream lookup. ARM-ONLY: existing
+  // watches keep reconciling regardless. Skipped entirely when no positive budget is configured (the
+  // breaker is OFF), so an unset MONTHLY_BUDGET_UNITS never rejects arms.
+  const budget = monthlyBudgetThreshold();
+  if (budget !== null && !budgetOk(await monthToDateSpend(), budget)) {
+    return { ok: false, reason: "We've hit this month's capacity. Please try again next month." };
+  }
+
   // 1. Flight.
   const flightRes = await fetchFlight(req.flightNumber, req.flightDate);
   if (flightRes.kind === "not_found") return { ok: false, reason: "No flight found for that number and date." };
@@ -104,22 +157,23 @@ export async function armWatch(req: ArmRequest, nowUtc: string): Promise<ArmResu
   const token = mintToken();
   const tokenHash = hashToken(token);
   const marginSource = req.marginMinutes === undefined ? "default" : "user";
-  const sql = db();
   try {
     await sql.begin(async (tx) => {
       await tx`
         INSERT INTO watches
-          (id, device_id, owner_token_hash, flight_number, flight_date, arrival_airport,
+          (id, device_id, user_id, owner_token_hash, flight_number, flight_date, arrival_airport,
            commitment_local, commitment_zone, commitment_instant, place_label, place_lat, place_lng,
            place_resolved, margin_minutes, margin_source, egress_minutes, transit_minutes,
-           transit_source, reschedulable, contact, state, revision, next_poll_at)
+           transit_source, reschedulable, contact, state, revision, next_poll_at, last_fetched_at,
+           terminal)
         VALUES
-          (${id}, ${req.deviceId}, ${tokenHash}, ${req.flightNumber}, ${req.flightDate},
-           ${flight.arrivalAirport}, ${req.commitmentLocal}, ${commitment.ianaZone},
+          (${id}, ${req.deviceId}, ${req.userId ?? null}, ${tokenHash}, ${req.flightNumber},
+           ${req.flightDate}, ${flight.arrivalAirport}, ${req.commitmentLocal}, ${commitment.ianaZone},
            ${valid.commitmentInstantUtc}, ${place.label}, ${place.lat}, ${place.lng},
            ${place.placeResolved}, ${commitment.marginMinutes}, ${marginSource},
            ${ENGINE.egressMinutes}, ${place.transitMinutes}, ${place.transitSource},
-           ${req.reschedulable}, ${req.contact ?? null}, ${state}, ${flight.revision}, now())`;
+           ${req.reschedulable}, ${req.contact ?? null}, ${state}, ${flight.revision},
+           ${landed ? null : nowUtc}, ${nowUtc}, ${landed})`;
       await tx`INSERT INTO calibration (watch_id) VALUES (${id})`;
     });
   } catch (e) {

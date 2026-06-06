@@ -1,4 +1,4 @@
-import { DateTime } from "luxon";
+import { formatInZone } from "@/lib/format/time";
 import type { StructuredAdvice, CatchMessage, RenderCatch } from "@/lib/push/types";
 
 /**
@@ -12,13 +12,8 @@ import type { StructuredAdvice, CatchMessage, RenderCatch } from "@/lib/push/typ
 
 /** Render a UTC ISO instant into advice.zone local time, e.g. "8:30 PM". Empty string if null. */
 function localTime(utcIso: string | null, zone: string): string {
-  if (utcIso === null) {
-    return "";
-  }
-  // Deterministic 12-hour clock; en-US so AM/PM is stable regardless of process locale.
-  return DateTime.fromISO(utcIso, { zone: "utc" })
-    .setZone(zone)
-    .toFormat("h:mm a", { locale: "en-US" });
+  // Shared 12-hour formatter (lib/format/time): en-US h12 so AM/PM is stable, "" for a null instant.
+  return formatInZone(utcIso, zone, "clock-12h");
 }
 
 export const renderCatch: RenderCatch = (advice: StructuredAdvice): CatchMessage => {

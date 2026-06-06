@@ -1,0 +1,38 @@
+/* Keeper — typography tokens
+ * Geist Sans for everything; Geist Mono for labels, codes, timestamps, flight numbers.
+ * Mono is used in small uppercase tracked "system" labels — a signature of the product UI.
+ */
+:root {
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Type scale (px) */
+  --text-xs:    12px;
+  --text-sm:    14px;
+  --text-base:  16px;
+  --text-lg:    18px;
+  --text-xl:    20px;
+  --text-2xl:   24px;
+  --text-3xl:   30px;
+  --text-4xl:   38px;
+  --text-5xl:   52px;
+  --text-6xl:   68px;
+
+  /* Weights */
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+
+  /* Line heights */
+  --leading-tight:  1.1;
+  --leading-snug:   1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  /* Tracking */
+  --tracking-tight: -0.02em;
+  --tracking-snug:  -0.01em;
+  --tracking-wide:  0.02em;
+  --tracking-label: 0.2em;   /* uppercase mono system labels */
+}

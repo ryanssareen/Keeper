@@ -1,0 +1,19 @@
+{
+  "name": "Keeper — flight commitment watch",
+  "short_name": "Keeper",
+  "description": "Watch a flight against one commitment and catch the cascade before you do.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    {
+      "src": "/globe.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

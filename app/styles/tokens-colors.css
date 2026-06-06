@@ -1,0 +1,95 @@
+/* Keeper — color tokens
+ * Monochrome ink base (zinc scale) + a traffic-light trip-health state system.
+ * The product is calm and neutral; color is reserved to signal trip state:
+ * emerald = on track, amber = at risk, red = miss, slate = can't confirm.
+ */
+:root {
+  /* ---- Neutral ink scale (zinc) ---- */
+  --zinc-50:  #fafafa;
+  --zinc-100: #f4f4f5;
+  --zinc-200: #e4e4e7;
+  --zinc-300: #d4d4d8;
+  --zinc-400: #a1a1aa;
+  --zinc-500: #71717a;
+  --zinc-600: #52525b;
+  --zinc-700: #3f3f46;
+  --zinc-800: #27272a;
+  --zinc-900: #18181b;
+  --zinc-950: #09090b;
+
+  /* ---- State: on track (emerald) ---- */
+  --emerald-50:  #ecfdf5;
+  --emerald-100: #d1fae5;
+  --emerald-200: #a7f3d0;
+  --emerald-500: #10b981;
+  --emerald-600: #059669;
+  --emerald-700: #047857;
+  --emerald-950: #022c22;
+
+  /* ---- State: at risk (amber) ---- */
+  --amber-50:  #fffbeb;
+  --amber-100: #fef3c7;
+  --amber-200: #fde68a;
+  --amber-500: #f59e0b;
+  --amber-600: #d97706;
+  --amber-900: #78350f;
+
+  /* ---- State: miss (red) ---- */
+  --red-50:  #fef2f2;
+  --red-100: #fee2e2;
+  --red-200: #fecaca;
+  --red-500: #ef4444;
+  --red-600: #dc2626;
+  --red-700: #b91c1c;
+  --red-950: #450a0a;
+
+  /* ---- State: can't confirm (slate) ---- */
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-900: #0f172a;
+
+  /* ---- Semantic aliases ---- */
+  --bg:            #ffffff;
+  --bg-subtle:     var(--zinc-50);
+  --bg-sunken:     var(--zinc-100);
+  --surface-card:  #ffffff;
+  --surface-ink:   var(--zinc-900);
+
+  --text-strong:   var(--zinc-900);
+  --text-body:     var(--zinc-700);
+  --text-muted:    var(--zinc-500);
+  --text-faint:    var(--zinc-400);
+  --text-on-ink:   #ffffff;
+
+  --border:        var(--zinc-200);
+  --border-strong: var(--zinc-300);
+  --hairline:      var(--zinc-200);
+
+  --accent:        var(--zinc-900);  /* primary action = ink */
+  --accent-hover:  var(--zinc-700);
+
+  /* state surfaces / accents */
+  --ok-surface:    var(--emerald-50);
+  --ok-border:     var(--emerald-200);
+  --ok-ink:        var(--emerald-700);
+  --ok-solid:      var(--emerald-600);
+
+  --risk-surface:  var(--amber-50);
+  --risk-border:   var(--amber-200);
+  --risk-ink:      var(--amber-600);
+  --risk-solid:    var(--amber-500);
+
+  --miss-surface:  var(--red-50);
+  --miss-border:   var(--red-200);
+  --miss-ink:      var(--red-600);
+  --miss-solid:    var(--red-600);
+
+  --unsure-surface: var(--slate-100);
+  --unsure-border:  var(--slate-300);
+  --unsure-ink:     var(--slate-600);
+  --unsure-solid:   var(--slate-500);
+}

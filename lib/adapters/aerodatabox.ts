@@ -174,6 +174,11 @@ export const parseFlightStatus = (raw: unknown): AdapterResult<FlightArrival> =>
 
 const RAPIDAPI_HOST = "aerodatabox.p.rapidapi.com";
 
+// Cap a single flight fetch so a hung upstream can't block the whole reconcile tick (and its
+// serverless invocation) indefinitely. On timeout the fetch aborts and is handled as a transport
+// failure -> the engine degrades the watch honestly rather than stalling the batch.
+const FETCH_TIMEOUT_MS = 8000;
+
 /**
  * Thin live fetch of the AeroDataBox flight-by-number endpoint via RapidAPI. Maps transport
  * outcomes onto {@link AdapterResult}: 404 -> not_found, 429 -> rate_limited (honoring
@@ -205,9 +210,11 @@ export const fetchFlight = async (
         "x-rapidapi-key": key,
         "x-rapidapi-host": RAPIDAPI_HOST,
       },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
   } catch {
-    // Never surface the underlying error object — it can echo the request (and headers).
+    // Never surface the underlying error object — it can echo the request (and headers). A timeout
+    // (AbortSignal) lands here too and is reported as a generic transport failure.
     return adapterError("network error reaching AeroDataBox");
   }
 

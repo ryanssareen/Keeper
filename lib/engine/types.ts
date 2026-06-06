@@ -52,7 +52,10 @@ export interface PlaceResolution {
   reason: "ok" | "geocode_miss" | "ambiguous" | "unroutable";
 }
 
-export type Verdict = "make" | "miss" | "indeterminate";
+/** Allowed verdicts — the single source of truth the `Verdict` union is derived from, also reused
+ *  by the DB-boundary `narrow` so the runtime check can never drift from the type. */
+export const VERDICTS = ["make", "miss", "indeterminate"] as const;
+export type Verdict = (typeof VERDICTS)[number];
 
 /** Inputs to one collision computation. Durations in minutes. */
 export interface CollisionInput {
@@ -78,16 +81,21 @@ export interface CollisionResult {
 /** The frozen collision-core signature U2 implements (test-first). */
 export type DetectCollision = (input: CollisionInput) => CollisionResult;
 
-/** State-machine states (U6). */
-export type WatchState =
-  | "OK"
-  | "AT_RISK"
-  | "MISS_PREDICTED"
-  | "RECOVERED"
-  | "DEGRADED"
-  | "CANCELLED"
-  | "DEFINITE_MISS"
-  | "LANDED_CAPTURE";
+/** State-machine states (U6). The `as const` array is the source of truth: the `WatchState` union is
+ *  derived from it, and the DB-boundary `narrow` reuses it so a coerced column can never accept a
+ *  value the type rejects (or reject one it accepts). */
+export const WATCH_STATES = [
+  "OK",
+  "AT_RISK",
+  "MISS_PREDICTED",
+  "RECOVERED",
+  "DEGRADED",
+  "CANCELLED",
+  "DEFINITE_MISS",
+  "LANDED_CAPTURE",
+] as const;
+export type WatchState = (typeof WATCH_STATES)[number];
 
 /** Notification kinds emitted on a firing transition. */
-export type FiredKind = "CATCH" | "ALL_CLEAR" | "CANNOT_CONFIRM" | "DEFINITE_MISS" | "CANCELLED";
+export const FIRED_KINDS = ["CATCH", "ALL_CLEAR", "CANNOT_CONFIRM", "DEFINITE_MISS", "CANCELLED"] as const;
+export type FiredKind = (typeof FIRED_KINDS)[number];

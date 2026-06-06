@@ -1,4 +1,4 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import {
@@ -13,8 +13,14 @@ import type { PredictionSnapshot } from "@/lib/calibration/types";
 const hasDb = Boolean(process.env.DATABASE_URL);
 
 describe.skipIf(!hasDb)("calibration writer (integration)", () => {
-  const sql = db();
+  // Lazy: acquiring the connection at describe-body level would throw during collection on a
+  // skipped (no-DB) run, defeating skipIf. beforeAll doesn't run for a skipped suite.
+  let sql: ReturnType<typeof db>;
   const created: string[] = [];
+
+  beforeAll(() => {
+    sql = db();
+  });
 
   async function makeWatch(airport = "JFK"): Promise<string> {
     const id = randomUUID();
@@ -101,14 +107,24 @@ describe.skipIf(!hasDb)("calibration writer (integration)", () => {
     expect(c2[0].self_report_status).toBe("pending");
   });
 
-  it("recordDelivery updates a fired transition's status and stamps sent_at", async () => {
+  it("recordDelivery settles a leased ('sending') row and stamps sent_at", async () => {
     const w = await makeWatch();
-    await sql`INSERT INTO fired_transitions (watch_id, transition, revision, kind)
-              VALUES (${w}, 'OK->AT_RISK', 'rd1', 'CATCH')`;
+    await sql`INSERT INTO fired_transitions (watch_id, transition, revision, kind, delivery_status)
+              VALUES (${w}, 'OK->AT_RISK', 'rd1', 'CATCH', 'sending')`;
     await recordDelivery(w, "OK->AT_RISK", "rd1", "sent");
     const f = await sql`SELECT delivery_status, sent_at FROM fired_transitions WHERE watch_id = ${w}`;
     expect(f[0].delivery_status).toBe("sent");
     expect(f[0].sent_at).not.toBeNull();
+  });
+
+  it("recordDelivery is a no-op on a row that is no longer 'sending' (stale settle after reclaim)", async () => {
+    const w = await makeWatch();
+    // A row already settled to 'sent' by a competing tick — a stale settle must not clobber it.
+    await sql`INSERT INTO fired_transitions (watch_id, transition, revision, kind, delivery_status, sent_at)
+              VALUES (${w}, 'OK->AT_RISK', 'rd2', 'CATCH', 'sent', now())`;
+    await recordDelivery(w, "OK->AT_RISK", "rd2", "failed");
+    const f = await sql`SELECT delivery_status FROM fired_transitions WHERE watch_id = ${w} AND revision = 'rd2'`;
+    expect(f[0].delivery_status).toBe("sent"); // unchanged — the guard rejected the stale settle
   });
 
   it("seals only once both the actual and the self-report have landed", async () => {
