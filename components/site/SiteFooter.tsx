@@ -26,8 +26,8 @@ export function SiteFooter(): React.ReactElement {
           </div>
           <div className="foot-col">
             <h6>Legal</h6>
-            <Link href="/">Privacy</Link>
-            <Link href="/">Terms</Link>
+            <Link href="/privacy">Privacy</Link>
+            <Link href="/terms">Terms</Link>
           </div>
         </div>
         <div className="foot-bottom">

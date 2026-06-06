@@ -13,7 +13,7 @@ export default async function LoginPage({
 }): Promise<React.ReactElement> {
   const params = await searchParams;
   const next = typeof params.next === "string" ? params.next : undefined;
-  const confirmError = params.error === "confirm";
+  const errorKind = typeof params.error === "string" ? params.error : undefined;
 
   return (
     <div className={s.auth}>
@@ -26,7 +26,7 @@ export default async function LoginPage({
         <div className={s.body}>
           <h1>Welcome back</h1>
           <p className={s.sub}>Pick up your watches right where you left them.</p>
-          <LoginForm next={next} confirmError={confirmError} />
+          <LoginForm next={next} errorKind={errorKind} />
           <p className={s.foot}>
             New to Keeper? <Link href="/signup">Create an account</Link>
           </p>
