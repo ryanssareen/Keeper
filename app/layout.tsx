@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { connection } from "next/server";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -30,11 +31,15 @@ export const viewport: Viewport = {
   themeColor: "#0a0a0a",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Nonce-based CSP requires dynamic rendering: the proxy mints a fresh script nonce per request, so
+  // pages cannot be prerendered at build time (their inline scripts would carry no/stale nonce and be
+  // blocked). `connection()` opts the whole tree into request-time rendering. See lib/security/headers.
+  await connection();
   return (
     <html
       lang="en"

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { securityHeaders } from "@/lib/security/headers";
+import { securityHeaders, buildContentSecurityPolicy } from "@/lib/security/headers";
 import { checkIpRateLimit } from "@/lib/security/ratelimit";
 import { refreshSession } from "@/lib/supabase/middleware";
 
@@ -69,16 +69,35 @@ function clientIp(req: NextRequest): string {
   return "unknown";
 }
 
-/** Apply the baseline security headers to a response in place, then return it. */
-function withSecurityHeaders(res: NextResponse): NextResponse {
-  for (const [name, value] of securityHeaders()) res.headers.set(name, value);
-  return res;
+/**
+ * Mint a per-request script nonce using only Web APIs guaranteed in the edge runtime (no Node
+ * `Buffer`). 16 random bytes → base64 is ample unpredictability for a one-time CSP nonce.
+ */
+function generateNonce(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
 }
 
 export async function proxy(req: NextRequest): Promise<NextResponse> {
   const { pathname, origin: selfOrigin } = req.nextUrl;
   const method = req.method.toUpperCase();
   const isMutation = MUTATING_METHODS.has(method);
+  const isDev = process.env.NODE_ENV === "development";
+
+  // Mint the nonce and the request headers Next reads to stamp it onto its inline scripts. Both the
+  // forwarded REQUEST (so SSR extracts the nonce) and the final RESPONSE must carry the same CSP.
+  const nonce = generateNonce();
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", buildContentSecurityPolicy(nonce, isDev));
+
+  /** Apply the baseline security headers (incl. the nonce'd CSP) to a response in place. */
+  const withSecurityHeaders = (res: NextResponse): NextResponse => {
+    for (const [name, value] of securityHeaders(nonce, isDev)) res.headers.set(name, value);
+    return res;
+  };
 
   // 1) Origin allowlist on mutations — reject cross-origin writes before any work.
   if (isMutation) {
@@ -103,13 +122,14 @@ export async function proxy(req: NextRequest): Promise<NextResponse> {
 
   // 3) API routes need no session refresh here: they're not navigations (no auth cookies to rotate),
   // and any route that needs the user resolves it itself via getCurrentUser. Skipping them keeps the
-  // hot cron/reconcile path off the Supabase auth round-trip.
+  // hot cron/reconcile path off the Supabase auth round-trip. (JSON responses carry no scripts, so
+  // the nonce is inert here — still forwarded for header consistency.)
   if (pathname.startsWith("/api/")) {
-    return withSecurityHeaders(NextResponse.next());
+    return withSecurityHeaders(NextResponse.next({ request: { headers: requestHeaders } }));
   }
 
   // 4) Refresh the Supabase session (rotates auth cookies onto `response`). No-ops without env.
-  const { response, user } = await refreshSession(req);
+  const { response, user } = await refreshSession(req, requestHeaders);
 
   // 5) Gate the post-auth app routes — bounce unauthenticated users to login, preserving intent.
   if (isProtected(pathname) && !user) {

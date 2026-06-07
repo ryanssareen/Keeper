@@ -59,6 +59,25 @@ describe("securityHeaders", () => {
     expect(scriptDirective).not.toContain("unsafe-inline");
     expect(scriptDirective).not.toContain("unsafe-eval");
   });
+
+  it("stamps the per-request nonce + strict-dynamic into script-src (production)", () => {
+    const csp = buildContentSecurityPolicy("NONCE123", false);
+    const scriptDirective = csp.split(";").find((d) => d.trim().startsWith("script-src"))!;
+    expect(scriptDirective).toContain("'nonce-NONCE123'");
+    expect(scriptDirective).toContain("'strict-dynamic'");
+    expect(scriptDirective).toContain("'self'"); // pre-CSP3 fallback retained
+    // The whole point: scripts never go permissive even with a nonce present.
+    expect(scriptDirective).not.toContain("unsafe-inline");
+    expect(scriptDirective).not.toContain("unsafe-eval");
+  });
+
+  it("adds 'unsafe-eval' to script-src only in development (React dev uses eval)", () => {
+    const dev = buildContentSecurityPolicy("NONCE123", true);
+    const devScript = dev.split(";").find((d) => d.trim().startsWith("script-src"))!;
+    expect(devScript).toContain("'unsafe-eval'");
+    // Inline scripts stay nonce-gated even in dev — only eval is relaxed.
+    expect(devScript).not.toContain("unsafe-inline");
+  });
 });
 
 describe("isOriginAllowed", () => {
