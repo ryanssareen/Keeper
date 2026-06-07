@@ -26,14 +26,14 @@ export async function saveOnboarding(
   answers: Partial<OnboardingAnswers>,
   step: number,
   completed = false,
-): Promise<void> {
+): Promise<{ ok: boolean }> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return;
+  if (!user) return { ok: false };
 
-  await supabase.from("onboarding").upsert(
+  const { error } = await supabase.from("onboarding").upsert(
     {
       user_id: user.id,
       answers,
@@ -43,4 +43,13 @@ export async function saveOnboarding(
     },
     { onConflict: "user_id" },
   );
+
+  // Never let a persistence failure pass silently again: the client calls this fire-and-forget, so a
+  // swallowed error (e.g. a missing table GRANT) once made onboarding selections vanish with no
+  // signal anywhere. Surface it in server logs and report status so callers can react if they choose.
+  if (error) {
+    console.error("[onboarding] failed to persist answers:", error.message);
+    return { ok: false };
+  }
+  return { ok: true };
 }
