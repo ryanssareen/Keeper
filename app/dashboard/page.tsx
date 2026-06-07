@@ -10,7 +10,9 @@ import {
 import { AppShell } from "@/components/app/AppShell";
 import { WatchList } from "@/components/app/WatchList";
 import { DashboardDetail } from "@/components/app/DashboardDetail";
+import { TripSummary } from "@/components/app/TripSummary";
 import { SelfReportForm, DashboardTokenFallback } from "@/components/SelfReportForm";
+import { loadOnboarding } from "@/lib/onboarding/queries";
 import s from "@/components/app/dashboard.module.css";
 
 /**
@@ -71,17 +73,34 @@ export default async function DashboardPage({
 
   const watches = await loadWatchesForUser(user.id);
 
-  // No watches yet → blank state inviting the first arm.
+  // No watches yet. If the user has finished onboarding, show the trip they set up — otherwise the
+  // flow dead-ends here (and the "arm a watch" CTA loops straight back to /onboarding).
   if (watches.length === 0) {
+    const onboarding = await loadOnboarding();
+    const trip = onboarding?.completed && onboarding.answers?.dest ? onboarding.answers : null;
+
+    if (trip) {
+      return (
+        <AppShell
+          user={shellUser}
+          railMiddle={<WatchList watches={[]} selectedId="" />}
+          header={<span>Trips</span>}
+          headerActions={<Link className="btn btn-secondary btn-sm" href="/onboarding">Edit trip</Link>}
+        >
+          <TripSummary answers={trip} />
+        </AppShell>
+      );
+    }
+
     return (
       <AppShell user={shellUser} railMiddle={<WatchList watches={[]} selectedId="" />} header={<span>Trips</span>}>
         <div className={s.blank}>
           <div className={s.blankRing}>
             <svg width="26" height="26" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="1.6" fill="#18181b" /><path d="M8 4.2a3.8 3.8 0 0 1 3.8 3.8" stroke="#18181b" strokeWidth="1.3" strokeLinecap="round" /><path d="M8 1.7a6.3 6.3 0 0 1 6.3 6.3" stroke="#a1a1aa" strokeWidth="1.3" strokeLinecap="round" /></svg>
           </div>
-          <h1>No watches yet</h1>
-          <p>Arm your first watch — point Keeper at a flight and the one thing downstream of it, and it’ll catch the cascade before you do.</p>
-          <Link className={`btn btn-primary btn-lg ${s.cta}`} href="/onboarding">Arm your first watch</Link>
+          <h1>No trips yet</h1>
+          <p>Set up your first trip and Keeper will keep every booking, document, and plan in one calm place.</p>
+          <Link className={`btn btn-primary btn-lg ${s.cta}`} href="/onboarding">Set up your trip</Link>
         </div>
       </AppShell>
     );
