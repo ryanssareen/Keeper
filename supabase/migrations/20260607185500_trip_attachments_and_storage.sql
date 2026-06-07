@@ -17,6 +17,9 @@ CREATE INDEX IF NOT EXISTS trip_attachments_user_idx ON trip_attachments (user_i
 
 ALTER TABLE trip_attachments ENABLE ROW LEVEL SECURITY;
 
+-- DROP IF EXISTS before each CREATE POLICY so the migration is idempotent (CREATE POLICY has no
+-- IF NOT EXISTS form) and survives a `supabase db reset` / CI replay.
+DROP POLICY IF EXISTS "owner_all" ON trip_attachments;
 CREATE POLICY "owner_all" ON trip_attachments
   FOR ALL
   USING     (auth.uid()::text = user_id)
@@ -31,14 +34,23 @@ VALUES ('trip-docs', 'trip-docs', false)
 ON CONFLICT (id) DO NOTHING;
 
 -- Object-level RLS: a user may only touch files under a folder named for their uid ("<uid>/<file>").
+DROP POLICY IF EXISTS "trip_docs_owner_read" ON storage.objects;
 CREATE POLICY "trip_docs_owner_read" ON storage.objects
   FOR SELECT TO authenticated
   USING (bucket_id = 'trip-docs' AND (storage.foldername(name))[1] = auth.uid()::text);
 
+DROP POLICY IF EXISTS "trip_docs_owner_insert" ON storage.objects;
 CREATE POLICY "trip_docs_owner_insert" ON storage.objects
   FOR INSERT TO authenticated
   WITH CHECK (bucket_id = 'trip-docs' AND (storage.foldername(name))[1] = auth.uid()::text);
 
+DROP POLICY IF EXISTS "trip_docs_owner_update" ON storage.objects;
+CREATE POLICY "trip_docs_owner_update" ON storage.objects
+  FOR UPDATE TO authenticated
+  USING      (bucket_id = 'trip-docs' AND (storage.foldername(name))[1] = auth.uid()::text)
+  WITH CHECK (bucket_id = 'trip-docs' AND (storage.foldername(name))[1] = auth.uid()::text);
+
+DROP POLICY IF EXISTS "trip_docs_owner_delete" ON storage.objects;
 CREATE POLICY "trip_docs_owner_delete" ON storage.objects
   FOR DELETE TO authenticated
   USING (bucket_id = 'trip-docs' AND (storage.foldername(name))[1] = auth.uid()::text);

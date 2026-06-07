@@ -49,8 +49,7 @@ export default async function TripsPage(): Promise<React.ReactElement> {
     );
   }
 
-  const flight = await loadTripFlight(trip);
-  const attachments = await listAttachments();
+  const [flight, attachments] = await Promise.all([loadTripFlight(trip), listAttachments()]);
 
   const hotel =
     trip.hotel === "Booked" && trip.hotelName ? `Booked · ${trip.hotelName}` : trip.hotel || "Not added";

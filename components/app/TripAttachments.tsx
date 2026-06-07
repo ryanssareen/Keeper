@@ -12,12 +12,16 @@ const fmtSize = (n: number | null): string => {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-const fmtDate = (iso: string): string =>
-  new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(new Date(iso));
+const fmtDate = (iso: string): string => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(d);
+};
 
 export function TripAttachments({ attachments }: { attachments: TripAttachment[] }): React.ReactElement {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
+  const inFlight = useRef(false);
   const [fileName, setFileName] = useState("");
   const [kind, setKind] = useState<string>("flight");
   const [busy, setBusy] = useState(false);
@@ -26,6 +30,7 @@ export function TripAttachments({ attachments }: { attachments: TripAttachment[]
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
+    if (inFlight.current) return; // guard a double Enter/click before `busy` disables the button
     setError(null);
     const form = e.currentTarget;
     const data = new FormData(form);
@@ -33,6 +38,7 @@ export function TripAttachments({ attachments }: { attachments: TripAttachment[]
       setError("Choose a file to upload.");
       return;
     }
+    inFlight.current = true;
     setBusy(true);
     try {
       const res = await uploadAttachment(data);
@@ -47,14 +53,29 @@ export function TripAttachments({ attachments }: { attachments: TripAttachment[]
     } catch {
       setError("Upload failed — please try again.");
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
 
   async function onDownload(filePath: string): Promise<void> {
-    const url = await getDownloadUrl(filePath);
-    if (url) window.open(url, "_blank", "noopener,noreferrer");
-    else setError("Couldn’t open that file — please try again.");
+    setError(null);
+    // Open the tab synchronously inside the click so the browser keeps user-activation; navigate it
+    // once the signed URL resolves. Without this the post-await window.open() is blocked as a popup.
+    const win = window.open("", "_blank", "noopener,noreferrer");
+    try {
+      const url = await getDownloadUrl(filePath);
+      if (!url) {
+        win?.close();
+        setError("Couldn’t open that file — please try again.");
+        return;
+      }
+      if (win) win.location.href = url;
+      else window.open(url, "_blank", "noopener,noreferrer");
+    } catch {
+      win?.close();
+      setError("Couldn’t open that file — please try again.");
+    }
   }
 
   async function onDelete(id: string): Promise<void> {

@@ -53,8 +53,10 @@ export async function uploadAttachment(formData: FormData): Promise<ActionResult
     size_bytes: file.size,
   });
   if (rowErr) {
-    // Roll back the orphaned object so storage and the table don't drift.
-    await supabase.storage.from(BUCKET).remove([path]);
+    // Roll back the orphaned object so storage and the table don't drift. Log a failed rollback so a
+    // leaked object is at least observable rather than silently orphaned.
+    const { error: rbErr } = await supabase.storage.from(BUCKET).remove([path]);
+    if (rbErr) console.error("[trips] rollback failed, orphaned object:", path, rbErr.message);
     console.error("[trips] attachment row insert failed:", rowErr.message);
     return { ok: false, error: "Couldn’t save the attachment — please try again." };
   }
@@ -79,12 +81,19 @@ export async function deleteAttachment(id: string): Promise<ActionResult> {
     .maybeSingle();
   if (findErr || !row) return { ok: false, error: "That attachment no longer exists." };
 
-  const { error: delErr } = await supabase.from("trip_attachments").delete().eq("id", id).eq("user_id", user.id);
-  if (delErr) {
-    console.error("[trips] attachment delete failed:", delErr.message);
+  // Remove the stored object first: a storage failure then leaves the row intact and retryable,
+  // instead of deleting the row and orphaning the object with no way to reach it from the UI.
+  const { error: stErr } = await supabase.storage.from(BUCKET).remove([row.file_path]);
+  if (stErr) {
+    console.error("[trips] storage remove failed:", stErr.message);
     return { ok: false, error: "Couldn’t remove the attachment — please try again." };
   }
-  await supabase.storage.from(BUCKET).remove([row.file_path]);
+
+  const { error: delErr } = await supabase.from("trip_attachments").delete().eq("id", id).eq("user_id", user.id);
+  if (delErr) {
+    console.error("[trips] attachment row delete failed (object already removed):", delErr.message);
+    return { ok: false, error: "Couldn’t remove the attachment — please try again." };
+  }
 
   revalidatePath("/trips");
   return { ok: true };
@@ -92,5 +101,22 @@ export async function deleteAttachment(id: string): Promise<ActionResult> {
 
 /** Mint a fresh signed download URL on demand (called from the client when a user clicks a file). */
 export async function getDownloadUrl(filePath: string): Promise<string | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  // Defense-in-depth: only sign a path the caller actually owns. Storage RLS already scopes reads to
+  // the owner's folder, but this app-layer check means a tampered path can't mint a URL even if that
+  // policy were ever loosened — the signing path no longer trusts arbitrary client input.
+  const { data: row } = await supabase
+    .from("trip_attachments")
+    .select("id")
+    .eq("file_path", filePath)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!row) return null;
+
   return signedUrl(filePath, 120);
 }
