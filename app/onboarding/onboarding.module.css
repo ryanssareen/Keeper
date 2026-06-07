@@ -80,7 +80,11 @@
 /* ---------- actions ---------- */
 .obActions { display: flex; gap: 12px; margin-top: 30px; padding-left: 51px; }
 .obActions .btnBack { color: var(--text-muted); }
+.obActions .btn[aria-busy="true"], .obActions .btn:disabled { opacity: 0.65; cursor: progress; }
 .obNote { padding-left: 51px; margin-top: 16px; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-faint); letter-spacing: 0.02em; }
+.obError {
+  padding-left: 51px; margin-top: 16px; font-size: 13.5px; line-height: 1.5; color: var(--red-700);
+}
 
 /* ---------- conditional detail reveal ---------- */
 .detailReveal { display: none; margin-top: 14px; padding-left: 51px; }
@@ -109,6 +113,6 @@
 
 @media (max-width: 560px) {
   .opts.two, .opts.three { grid-template-columns: 1fr; }
-  .qLede, .opts, .searchBlock, .obActions, .obNote { padding-left: 0; }
+  .qLede, .opts, .searchBlock, .obActions, .obNote, .obError { padding-left: 0; }
   .recapGrid { grid-template-columns: 1fr; }
 }

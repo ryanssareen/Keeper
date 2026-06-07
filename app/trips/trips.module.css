@@ -1,0 +1,53 @@
+/* Trips page: trip hub with a live flight card, stay card, and classified attachments. */
+
+.page { max-width: 760px; }
+.sep { color: var(--text-faint); margin: 0 8px; }
+
+/* ---- left-rail trip nav ---- */
+.rail { display: flex; flex-direction: column; gap: 6px; }
+.railLabel { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-faint); padding: 0 4px 6px; }
+.railItem { display: flex; flex-direction: column; gap: 1px; padding: 10px 12px; border-radius: 12px; border: 1px solid transparent; }
+.railItem:hover { background: var(--bg-subtle); }
+.railItemActive { background: #fff; border-color: var(--border); box-shadow: var(--shadow-xs); }
+.railDest { font-size: 14px; font-weight: 600; color: var(--text-strong); }
+.railSub { font-size: 12px; color: var(--text-muted); }
+.railEmpty { font-size: 13px; color: var(--text-faint); padding: 8px 12px; }
+
+/* ---- header ---- */
+.tripHead { padding: 4px 0 2px; }
+.who { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-faint); }
+.tripHead h1 { font-size: 28px; letter-spacing: -0.03em; margin-top: 8px; color: var(--text-strong); line-height: 1.15; }
+.tripHead p { font-size: 14.5px; color: var(--text-muted); margin-top: 8px; line-height: 1.5; }
+
+/* ---- cards ---- */
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 24px; }
+@media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
+
+.card { background: #fff; border: 1px solid var(--border); border-radius: 18px; padding: 18px 20px; box-shadow: var(--shadow-sm); }
+.cardTop { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.cardKicker { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-faint); }
+
+.bigRow { display: flex; align-items: baseline; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+.bigVal { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; color: var(--text-strong); font-family: var(--font-mono); }
+.bigValMuted { font-size: 18px; font-weight: 600; color: var(--text-faint); }
+
+.delay { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
+.delayOk { background: var(--emerald-50, #ecfdf5); color: #047857; }
+.delayBad { background: #fef2f2; color: #b91c1c; }
+
+.statusPill { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 999px; letter-spacing: 0.01em; }
+.pill_ok { background: #ecfdf5; color: #047857; }
+.pill_warn { background: #fffbeb; color: #b45309; }
+.pill_bad { background: #fef2f2; color: #b91c1c; }
+.pill_muted, .pillMuted { background: var(--bg-sunken); color: var(--text-muted); }
+
+.metaGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; margin-top: 18px; }
+.metaGrid dt { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); }
+.metaGrid dd { font-size: 14px; font-weight: 600; color: var(--text-strong); margin-top: 4px; }
+
+.note { font-size: 11.5px; color: var(--text-faint); margin-top: 16px; line-height: 1.5; }
+
+/* ---- blank ---- */
+.blank { max-width: 460px; margin: 72px auto; text-align: center; padding: 0 24px; }
+.blank h1 { font-size: 24px; letter-spacing: -0.025em; color: var(--text-strong); }
+.blank p { font-size: 14.5px; color: var(--text-muted); margin-top: 10px; line-height: 1.6; }
