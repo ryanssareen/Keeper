@@ -1,8 +1,10 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { loadOnboarding } from "@/lib/onboarding/queries";
+import type { OnboardingAnswers } from "@/lib/onboarding/actions";
 import { loadTripFlight, type TripFlight } from "@/lib/trips/flight";
 import { listAttachments } from "@/lib/trips/queries";
 import { AppShell } from "@/components/app/AppShell";
@@ -49,7 +51,7 @@ export default async function TripsPage(): Promise<React.ReactElement> {
     );
   }
 
-  const [flight, attachments] = await Promise.all([loadTripFlight(trip), listAttachments()]);
+  const attachments = await listAttachments();
 
   const hotel =
     trip.hotel === "Booked" && trip.hotelName ? `Booked · ${trip.hotelName}` : trip.hotel || "Not added";
@@ -75,7 +77,11 @@ export default async function TripsPage(): Promise<React.ReactElement> {
         </header>
 
         <div className={s.cards}>
-          <FlightCard flight={flight} />
+          {/* Stream the flight card on its own so a slow provider (up to the adapter's 8s timeout)
+              never blocks the stay card or the attachments below it. */}
+          <Suspense fallback={<FlightCardSkeleton />}>
+            <FlightSection trip={trip} />
+          </Suspense>
 
           <article className={s.card}>
             <div className={s.cardTop}>
@@ -96,6 +102,24 @@ export default async function TripsPage(): Promise<React.ReactElement> {
         <TripAttachments attachments={attachments} />
       </div>
     </AppShell>
+  );
+}
+
+/** Async island: fetches live flight status so the surrounding page can render without waiting on it. */
+async function FlightSection({ trip }: { trip: Partial<OnboardingAnswers> }): Promise<React.ReactElement> {
+  const flight = await loadTripFlight(trip);
+  return <FlightCard flight={flight} />;
+}
+
+function FlightCardSkeleton(): React.ReactElement {
+  return (
+    <article className={s.card} aria-busy="true">
+      <div className={s.cardTop}>
+        <span className={s.cardKicker}>Flight</span>
+        <span className={`${s.statusPill} ${s.pillMuted}`}>Checking…</span>
+      </div>
+      <div className={s.bigRow}><span className={s.bigValMuted}>Loading live status…</span></div>
+    </article>
   );
 }
 
