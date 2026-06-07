@@ -10,7 +10,7 @@ type Answers = OnboardingAnswers;
 
 const DEFAULTS: Answers = {
   trip: "", party: "2 people", dest: "Lisbon", country: "Portugal", code: "LIS",
-  flight: "", flightNo: "", flightDate: "", hotel: "", hotelName: "", hotelIn: "", hotelOut: "",
+  flight: "", flightNo: "", flightDate: "", seat: "", hotel: "", hotelName: "", hotelIn: "", hotelOut: "",
 };
 
 type City = { city: string; country: string; code: string };
@@ -266,6 +266,10 @@ export function OnboardingWizard({
                 <input className="field" id="fDate" type="date" value={answers.flightDate} onChange={(e) => set({ flightDate: e.target.value })} />
               </div>
             </div>
+            <div>
+              <label className="field-label" htmlFor="fSeat">Seat(s)</label>
+              <input className="field mono" id="fSeat" placeholder="e.g. 14A, 14B" value={answers.seat} onChange={(e) => set({ seat: e.target.value })} />
+            </div>
           </div>
         </div>
         <div className={s.obActions}>
@@ -337,7 +341,7 @@ export function OnboardingWizard({
           </dl>
         </div>
         <div className={cx(s.obActions, s.confirmActions)}>
-          <Link className="btn btn-primary btn-lg btn-block" href="/dashboard">Open my trip</Link>
+          <Link className="btn btn-primary btn-lg btn-block" href="/trips">Open my trip</Link>
         </div>
       </section>
     </div>

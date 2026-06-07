@@ -85,7 +85,12 @@ export default async function DashboardPage({
           user={shellUser}
           railMiddle={<WatchList watches={[]} selectedId="" />}
           header={<span>Trips</span>}
-          headerActions={<Link className="btn btn-secondary btn-sm" href="/onboarding">Edit trip</Link>}
+          headerActions={
+            <>
+              <Link className="btn btn-secondary btn-sm" href="/onboarding">Edit trip</Link>
+              <Link className="btn btn-primary btn-sm" href="/trips">Open trip</Link>
+            </>
+          }
         >
           <TripSummary answers={trip} />
         </AppShell>

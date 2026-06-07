@@ -10,6 +10,7 @@ export type OnboardingAnswers = {
   flight: string;
   flightNo: string;
   flightDate: string;
+  seat: string;
   hotel: string;
   hotelName: string;
   hotelIn: string;

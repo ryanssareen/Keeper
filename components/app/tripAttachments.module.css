@@ -1,0 +1,57 @@
+/* Trip attachments: upload row + classified document list. Shared design tokens. */
+
+.wrap { margin-top: 28px; }
+.head h2 { font-size: 17px; letter-spacing: -0.02em; color: var(--text-strong); }
+.head p { font-size: 13.5px; color: var(--text-muted); margin-top: 4px; line-height: 1.5; }
+
+.uploader { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; align-items: stretch; }
+
+.fileBtn {
+  position: relative; flex: 1 1 220px; min-width: 0; display: inline-flex; align-items: center;
+  padding: 10px 14px; background: #fff; border: 1px solid var(--border-strong); border-radius: 12px;
+  font-size: 13.5px; color: var(--text-body); cursor: pointer; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  transition: border-color var(--dur-fast);
+}
+.fileBtn:hover { border-color: var(--zinc-900); }
+.fileBtn span { overflow: hidden; text-overflow: ellipsis; }
+.fileInput { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+.kindSelect {
+  flex: 0 0 auto; padding: 10px 12px; background: #fff; border: 1px solid var(--border-strong);
+  border-radius: 12px; font-size: 13.5px; color: var(--text-strong); cursor: pointer;
+}
+.kindSelect:focus { outline: none; border-color: var(--zinc-900); box-shadow: 0 0 0 3px rgba(9,9,11,0.06); }
+
+.error { margin-top: 12px; font-size: 13px; color: var(--red-700); line-height: 1.5; }
+.empty { margin-top: 16px; font-size: 13.5px; color: var(--text-faint); border: 1px dashed var(--border-strong); border-radius: 14px; padding: 22px; text-align: center; }
+
+.list { margin-top: 16px; display: grid; gap: 8px; }
+.item {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #fff;
+  border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-xs);
+}
+.chip {
+  flex: 0 0 auto; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 4px 9px; border-radius: 999px; background: var(--bg-sunken); color: var(--text-muted); border: 1px solid var(--hairline);
+}
+.chip_flight { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.chip_hotel { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+.chip_car { background: #fefce8; color: #a16207; border-color: #fde68a; }
+.chip_insurance { background: #faf5ff; color: #7e22ce; border-color: #e9d5ff; }
+
+.name {
+  flex: 1 1 auto; min-width: 0; text-align: left; font-size: 14px; font-weight: 500; color: var(--text-strong);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; background: none; border: 0; padding: 0;
+}
+.name:hover { text-decoration: underline; }
+.meta { flex: 0 0 auto; font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
+.del {
+  flex: 0 0 auto; font-size: 12px; color: var(--text-muted); background: none; border: 0; cursor: pointer; padding: 4px 6px; border-radius: 8px;
+}
+.del:hover { color: var(--red-700); background: var(--red-50); }
+.del:disabled { opacity: 0.5; cursor: default; }
+
+@media (max-width: 560px) {
+  .uploader { flex-direction: column; }
+  .meta { display: none; }
+}
