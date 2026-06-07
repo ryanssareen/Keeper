@@ -62,13 +62,38 @@ export function OnboardingWizard({
   const [suggestions, setSuggestions] = useState<City[]>([]);
   const [cursor, setCursor] = useState(-1);
   const [destChosen, setDestChosen] = useState(Boolean(initialAnswers?.dest));
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const customRef = useRef<HTMLInputElement>(null);
   const answersRef = useRef(answers);
 
+  // Intermediate step changes autosave progress in the background — best-effort, since the final
+  // submit re-sends the complete answers and is the authoritative write we actually verify.
   const go = useCallback((i: number) => {
     setStep(i);
     window.scrollTo({ top: 0, behavior: "instant" });
-    saveOnboarding(answersRef.current, i, i >= 5).catch(() => {});
+    saveOnboarding(answersRef.current, i, false).catch(() => {});
+  }, []);
+
+  // Final submission. Unlike `go`, this AWAITS the save and only advances to the success screen when
+  // the row actually persisted — so a failed write can no longer masquerade as "All set". A loading
+  // state covers the round-trip and any failure is surfaced for the user to retry.
+  const submit = useCallback(async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const { ok } = await saveOnboarding(answersRef.current, 5, true);
+      if (!ok) {
+        setError("We couldn’t save your trip. Check your connection and try again.");
+        return;
+      }
+      setStep(5);
+      window.scrollTo({ top: 0, behavior: "instant" });
+    } catch {
+      setError("Something went wrong saving your trip. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   }, []);
 
   const set = (patch: Partial<Answers>) =>
@@ -278,9 +303,12 @@ export function OnboardingWizard({
           </div>
         </div>
         <p className={s.obNote}>Hotel integrations are coming soon — for now we&apos;ll keep your details organized.</p>
+        {error ? <p className={s.obError} role="alert">{error}</p> : null}
         <div className={s.obActions}>
-          <button type="button" className={cx("btn btn-ghost btn-lg", s.btnBack)} onClick={() => go(3)}>Back</button>
-          <button type="button" className="btn btn-primary btn-lg" style={{ flex: 1 }} onClick={() => go(5)}>Continue</button>
+          <button type="button" className={cx("btn btn-ghost btn-lg", s.btnBack)} onClick={() => go(3)} disabled={submitting}>Back</button>
+          <button type="button" className="btn btn-primary btn-lg" style={{ flex: 1 }} onClick={submit} disabled={submitting} aria-busy={submitting}>
+            {submitting ? "Saving your trip…" : "Continue"}
+          </button>
         </div>
       </section>
 
