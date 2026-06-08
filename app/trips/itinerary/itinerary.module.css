@@ -1,0 +1,71 @@
+/* Itinerary surface — day-by-day plan with generation, monitorability, adherence. Shared tokens. */
+
+.page { max-width: 760px; }
+.sep { color: var(--text-faint); margin: 0 8px; }
+
+/* rail */
+.rail { display: flex; flex-direction: column; gap: 4px; }
+.railLabel { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-faint); padding: 0 4px 6px; }
+.railItem { padding: 9px 12px; border-radius: 11px; font-size: 14px; color: var(--text-body); border: 1px solid transparent; }
+.railItem:hover { background: var(--bg-subtle); }
+.railActive { background: #fff; border-color: var(--border); box-shadow: var(--shadow-xs); font-weight: 600; color: var(--text-strong); }
+
+/* header */
+.head { padding: 4px 0 2px; }
+.who { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-faint); }
+.head h1 { font-size: 28px; letter-spacing: -0.03em; margin-top: 8px; color: var(--text-strong); line-height: 1.15; }
+.head p { font-size: 14.5px; color: var(--text-muted); margin-top: 8px; line-height: 1.5; max-width: 52ch; }
+.anchors { font-family: var(--font-mono); font-size: 12px; color: var(--text-faint); }
+.note { font-size: 13px; color: var(--text-muted); background: var(--bg-subtle); border: 1px solid var(--hairline); border-radius: 12px; padding: 10px 14px; }
+
+.actions { margin-top: 18px; }
+.actions .btn[aria-busy="true"] { opacity: 0.65; cursor: progress; }
+
+.error { margin-top: 14px; font-size: 13.5px; color: var(--red-700); }
+.summary { margin-top: 14px; font-size: 13.5px; color: var(--text-muted); }
+.advisories { margin-top: 10px; display: grid; gap: 6px; }
+.advisory { font-size: 13px; color: var(--amber-700, #b45309); background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 8px 12px; }
+
+.empty { margin-top: 20px; font-size: 14px; color: var(--text-muted); border: 1px dashed var(--border-strong); border-radius: 16px; padding: 24px; line-height: 1.55; }
+
+/* days + items */
+.day { margin-top: 26px; }
+.dayHead { font-size: 13px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-faint); margin-bottom: 10px; }
+.items { display: grid; gap: 8px; }
+.item {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #fff;
+  border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-xs);
+}
+.item.done { opacity: 0.6; }
+.item.done .title { text-decoration: line-through; }
+.check {
+  flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--border-strong);
+  display: grid; place-items: center; cursor: pointer; background: #fff; color: #fff; font-size: 12px;
+}
+.item.done .check { background: #059669; border-color: #059669; } /* completed = green */
+.check:disabled { opacity: 0.5; cursor: default; }
+.time { flex: 0 0 auto; font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); width: 46px; }
+.body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.title { font-size: 14.5px; font-weight: 600; color: var(--text-strong); }
+.place { font-size: 12.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.watched {
+  flex: 0 0 auto; font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 3px 8px; border-radius: 999px; background: #ecfdf5; color: #047857; border: 1px solid #bbf7d0;
+}
+.remove { flex: 0 0 auto; font-size: 12px; color: var(--text-muted); background: none; border: 0; cursor: pointer; padding: 4px 6px; border-radius: 8px; }
+.remove:hover { color: var(--red-700); background: var(--red-50); }
+.remove:disabled { opacity: 0.5; cursor: default; }
+
+/* blank (no trip) */
+.blank { max-width: 460px; margin: 72px auto; text-align: center; }
+.blank h1 { font-size: 24px; letter-spacing: -0.025em; color: var(--text-strong); }
+.blank p { font-size: 14.5px; color: var(--text-muted); margin-top: 10px; line-height: 1.6; }
+
+/* skeleton */
+.skel { height: 64px; border-radius: 14px; background: linear-gradient(90deg, var(--bg-subtle), var(--bg-sunken), var(--bg-subtle)); background-size: 200% 100%; animation: shimmer 1.3s infinite; margin-top: 8px; }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+@media (max-width: 560px) {
+  .watched { display: none; }
+  .check { width: 28px; height: 28px; } /* larger touch target in-trip */
+}
