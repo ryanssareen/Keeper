@@ -58,6 +58,12 @@ How detected breaks and advice reach the traveler: the alert engine (push/FCM), 
 
 _Why it serves the approach:_ Reconciliation only creates value if the break and the recommended action reach the organizer in time. This is where the promise is felt — and where first-useful-catch is won or lost.
 
+### Plan-time itinerary _(experimental — reopened 2026-06-07)_
+
+An AI itinerary that is the *opposite* of the rejected commodity: it generates **anchored to the user's real bookings** (every item born with a time and place, so it's monitorable), then applies the engine's collision logic at **plan-time** to flag fragile seams before the trip — and tracks **plan adherence** during the trip (the user checks off what they actually did; missed items trigger a structured, non-chatbot catch-up that reconciles tomorrow against what slipped).
+
+_Why it serves the approach:_ It feeds the wedge rather than diluting it — generation becomes an **activation on-ramp** that converts loose plans into the monitorable items the engine needs (directly lifting "thesis-exercising trips created"), and plan-adherence is a fresh **planned-vs-actual calibration signal** for the moat. _Guardrail:_ if it drifts to untethered free-text recommendations, it collapses back into the rejected commodity — monitorability + booking-anchoring is the line. Experimental: validate demand before promoting out of this track.
+
 ## Milestones
 
 - **2026-11 → 2026-12 (target window)** — Live with the walking skeleton before the year-end holiday travel peak. Peak delays mean peak cascades: the fastest calibration and the strongest value demonstration. Summer 2026 is likely too tight. _(Founder to confirm against build velocity; no fundraise or hard date invented.)_
@@ -65,7 +71,7 @@ _Why it serves the approach:_ Reconciliation only creates value if the break and
 ## Not working on
 
 - **Auto-fix / write-access** (rebooking transfers, moving reservations) — detect-and-advise only at MVP; acting needs write-access partnerships, deferred.
-- **AI itinerary _generation_** — out of the wedge (calm-state, commoditized axis we rejected; doesn't exercise the thesis). Keep only the unified dashboard of ingested/modeled items. _(Conscious narrowing from the original Pillar 3.)_
+- **Generic AI itinerary _generation_** (untethered "things to do" from a city + dates) — still out: calm-state, commoditized axis, doesn't exercise the thesis. _But_ a **reconciliation-native variant** — booking-anchored, every item monitorable, with plan-adherence catch-up — moved to an active experiment (see Tracks → _Plan-time itinerary (experimental)_). The line that stays out is untethered generation; the line that came back in is itinerary-as-engine-input. _(Reopened 2026-06-07; see docs/brainstorms/2026-06-07-ai-itinerary-requirements.md.)_
 - **Group collaboration / shared editing / group accounts** — family is the alert *audience* (a shareable status view), not co-editors at MVP.
 - **Live flight map** (OpenSky / AirLabs) — deferred.
 - **Hotel inventory / booking APIs** — parse the user's own confirmation instead.
