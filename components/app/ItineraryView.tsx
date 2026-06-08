@@ -2,7 +2,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { generateItinerary, deleteItineraryItem, setItemStatus } from "@/lib/itinerary/actions";
-import { cmpStr, groupByDay, type ItineraryItem } from "@/lib/itinerary/itinerary";
+import { cmpStr, groupByDay, type ItineraryItem, type ItemStatus } from "@/lib/itinerary/itinerary";
 import type { Advisory } from "@/lib/itinerary/feasibility";
 import s from "@/app/trips/itinerary/itinerary.module.css";
 
@@ -30,6 +30,12 @@ export function ItineraryView({
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<GenSummary>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  // Optimistic status overlay: the tick must reflect the click instantly and hold, independent of when
+  // the server refetch lands — otherwise a refresh/RSC-cache race re-renders the stale status and the
+  // tick flashes on then off (issue #7). The overlay stays in sync with the server (it only ever holds
+  // the value we just persisted); regenerate creates new item ids, so stale overrides can't linger.
+  const [statusOverride, setStatusOverride] = useState<Record<string, ItemStatus>>({});
+  const statusOf = (it: ItineraryItem): ItemStatus => statusOverride[it.id] ?? it.status;
 
   async function onGenerate(): Promise<void> {
     if (inFlight.current) return; // guard a double-click before `busy` disables the button
@@ -53,14 +59,23 @@ export function ItineraryView({
   }
 
   async function onToggle(item: ItineraryItem): Promise<void> {
+    const current = statusOf(item);
+    const next: ItemStatus = current === "completed" ? "planned" : "completed";
+    // Optimistic: flip the tick immediately and hold it; the server refetch reconciles to the same value.
+    setStatusOverride((prev) => ({ ...prev, [item.id]: next }));
     setPendingId(item.id);
     setError(null);
     setSummary(null); // the generate summary is stale once items are edited
+    if (process.env.NODE_ENV !== "production") console.debug("[itinerary] toggle", { id: item.id, from: current, to: next });
     try {
-      const next = item.status === "completed" ? "planned" : "completed";
       const res = await setItemStatus(item.id, next);
-      if (!res.ok) setError(res.error);
-      else router.refresh();
+      if (process.env.NODE_ENV !== "production") console.debug("[itinerary] toggle result", { id: item.id, ok: res.ok });
+      if (!res.ok) {
+        setStatusOverride((prev) => ({ ...prev, [item.id]: current })); // revert on failure
+        setError(res.error);
+      } else {
+        router.refresh();
+      }
     } finally {
       setPendingId(null);
     }
@@ -123,16 +138,18 @@ export function ItineraryView({
           <section key={day} className={s.day}>
             <h2 className={s.dayHead}>{fmtDay(day)}</h2>
             <ul className={s.items}>
-              {dayItems.map((it) => (
-                <li key={it.id} className={`${s.item} ${it.status === "completed" ? s.done : ""}`}>
+              {dayItems.map((it) => {
+                const done = statusOf(it) === "completed";
+                return (
+                <li key={it.id} className={`${s.item} ${done ? s.done : ""}`}>
                   <button
                     type="button"
                     className={s.check}
                     onClick={() => onToggle(it)}
                     disabled={pendingId === it.id}
-                    aria-label={it.status === "completed" ? `Mark ${it.title} not done` : `Mark ${it.title} done`}
+                    aria-label={done ? `Mark ${it.title} not done` : `Mark ${it.title} done`}
                   >
-                    {it.status === "completed" ? "✓" : ""}
+                    {done ? "✓" : ""}
                   </button>
                   <span className={s.time}>{fmtTime(it.startTs, it.ianaZone) || "—"}</span>
                   <span className={s.body}>
@@ -144,7 +161,8 @@ export function ItineraryView({
                     Remove
                   </button>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           </section>
         ))
