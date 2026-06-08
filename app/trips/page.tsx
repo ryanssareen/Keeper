@@ -67,7 +67,12 @@ export default async function TripsPage(): Promise<React.ReactElement> {
           <b>{trip.dest}</b>
         </>
       }
-      headerActions={<Link className="btn btn-secondary btn-sm" href="/onboarding">Edit trip</Link>}
+      headerActions={
+        <>
+          <Link className="btn btn-secondary btn-sm" href="/onboarding">Edit trip</Link>
+          <Link className="btn btn-primary btn-sm" href="/trips/itinerary">Plan my days</Link>
+        </>
+      }
     >
       <div className={s.page}>
         <header className={s.tripHead}>
