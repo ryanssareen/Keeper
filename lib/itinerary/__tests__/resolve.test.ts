@@ -32,6 +32,12 @@ describe("assessGeocodeHit — geocode-success, not importance (U0 fix)", () => 
     const jp = [{ lat: "35.65", lon: "139.74", name: "東京タワー", display_name: "..." }];
     expect(assessGeocodeHit("東京", jp)).toEqual({ lat: 35.65, lng: 139.74 });
   });
+
+  it("keeps a CJK place whose geocoded result is ROMANIZED (no token overlap) — script detection, not the U0 drop", () => {
+    // Old code: "東京タワー" forms a >=4-char token, romanized "Tokyo Tower" has no overlap -> dropped.
+    const romanized = [{ lat: "35.6586", lon: "139.7454", name: "Tokyo Tower", display_name: "Tokyo Tower, Minato, Tokyo" }];
+    expect(assessGeocodeHit("東京タワー", romanized)).toEqual({ lat: 35.6586, lng: 139.7454 });
+  });
 });
 
 const plan: CandidatePlan = {
@@ -66,5 +72,17 @@ describe("resolveCandidates — keeps monitorable, drops unresolved, caches", ()
     const { items, dropped } = await resolveCandidates(plan, "Lisbon", { geocode, rateMs: 0 });
     expect(items).toHaveLength(0);
     expect(dropped).toBe(3);
+  });
+
+  it("caps total geocodes so a long trip can't blow the time budget", async () => {
+    // 60 unique candidates across days; geocoder must be called at most the cap (40), rest dropped.
+    const bigPlan: CandidatePlan = {
+      days: [{ date: "2026-06-09", places: Array.from({ length: 60 }, (_, i) => ({ name: `P${i}`, localName: `Place ${i}`, kind: "sight" as const })) }],
+    };
+    const geocode = vi.fn(async () => ({ lat: 38.7, lng: -9.1 }));
+    const { items, dropped } = await resolveCandidates(bigPlan, "Lisbon", { geocode, rateMs: 0 });
+    expect(geocode.mock.calls.length).toBeLessThanOrEqual(40);
+    expect(items.length + dropped).toBe(60); // every candidate accounted for (kept or dropped)
+    expect(dropped).toBeGreaterThanOrEqual(20);
   });
 });

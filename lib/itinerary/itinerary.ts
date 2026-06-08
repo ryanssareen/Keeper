@@ -39,3 +39,17 @@ export type ItineraryItem = MonitorableItem & {
   status: ItemStatus;
   createdAt: string;
 };
+
+/** Group items by `day`, preserving insertion order within each day. */
+export function groupByDay<T extends { day: string }>(items: T[]): Map<string, T[]> {
+  const map = new Map<string, T[]>();
+  for (const it of items) {
+    const list = map.get(it.day) ?? [];
+    list.push(it);
+    map.set(it.day, list);
+  }
+  return map;
+}
+
+/** Total-order string compare (returns 0 for equal) — safe for Array.sort, unlike a `< ? -1 : 1` form. */
+export const cmpStr = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);

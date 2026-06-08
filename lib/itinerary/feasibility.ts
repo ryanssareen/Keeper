@@ -1,6 +1,6 @@
 import { toInstant } from "@/lib/engine/time";
 import { ITINERARY } from "@/lib/itinerary/constants";
-import type { MonitorableItem } from "@/lib/itinerary/itinerary";
+import { cmpStr, groupByDay, type MonitorableItem } from "@/lib/itinerary/itinerary";
 
 /**
  * Plan-time feasibility / seam checker (U5) — pure, no I/O. Reconciliation applied at plan-time: flag
@@ -44,14 +44,7 @@ const minutesBetween = (aIso: string, bIso: string): number =>
  */
 export function checkFeasibility(items: MonitorableItem[]): Advisory[] {
   const advisories: Advisory[] = [];
-  const byDay = new Map<string, MonitorableItem[]>();
-  for (const it of items) {
-    const list = byDay.get(it.day) ?? [];
-    list.push(it);
-    byDay.set(it.day, list);
-  }
-
-  for (const [day, dayItems] of byDay) {
+  for (const [day, dayItems] of groupByDay(items)) {
     if (dayItems.length > ITINERARY.maxItemsPerDay) {
       advisories.push({
         kind: "over_packed",
@@ -62,7 +55,7 @@ export function checkFeasibility(items: MonitorableItem[]): Advisory[] {
 
     const scheduled = dayItems
       .filter((i) => i.startTs && i.endTs)
-      .sort((a, b) => (a.startTs! < b.startTs! ? -1 : 1));
+      .sort((a, b) => cmpStr(a.startTs!, b.startTs!));
 
     for (const it of scheduled) {
       const stay = minutesBetween(it.startTs!, it.endTs!);

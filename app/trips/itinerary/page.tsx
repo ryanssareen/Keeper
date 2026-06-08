@@ -9,6 +9,9 @@ import { ItineraryView } from "@/components/app/ItineraryView";
 import s from "./itinerary.module.css";
 
 export const metadata: Metadata = { title: "Keeper — Itinerary" };
+// Generation runs as a server action from this page: a Groq call + sequential geocoding (capped).
+// Raise the function budget above the platform default so a multi-day plan can't be killed mid-run.
+export const maxDuration = 120;
 
 export default async function ItineraryPage(): Promise<React.ReactElement> {
   const user = await getCurrentUser();

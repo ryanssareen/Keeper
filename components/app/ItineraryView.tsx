@@ -1,8 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { generateItinerary, deleteItineraryItem, setItemStatus } from "@/lib/itinerary/actions";
-import type { ItineraryItem } from "@/lib/itinerary/itinerary";
+import { cmpStr, groupByDay, type ItineraryItem } from "@/lib/itinerary/itinerary";
 import type { Advisory } from "@/lib/itinerary/feasibility";
 import s from "@/app/trips/itinerary/itinerary.module.css";
 
@@ -25,12 +25,15 @@ export function ItineraryView({
   dest: string;
 }): React.ReactElement {
   const router = useRouter();
+  const inFlight = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<GenSummary>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   async function onGenerate(): Promise<void> {
+    if (inFlight.current) return; // guard a double-click before `busy` disables the button
+    inFlight.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -44,12 +47,15 @@ export function ItineraryView({
     } catch {
       setError("Something went wrong generating your itinerary. Please try again.");
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
 
   async function onToggle(item: ItineraryItem): Promise<void> {
     setPendingId(item.id);
+    setError(null);
+    setSummary(null); // the generate summary is stale once items are edited
     try {
       const next = item.status === "completed" ? "planned" : "completed";
       const res = await setItemStatus(item.id, next);
@@ -62,6 +68,8 @@ export function ItineraryView({
 
   async function onRemove(id: string): Promise<void> {
     setPendingId(id);
+    setError(null);
+    setSummary(null);
     try {
       const res = await deleteItineraryItem(id);
       if (!res.ok) setError(res.error);
@@ -71,7 +79,7 @@ export function ItineraryView({
     }
   }
 
-  const days = groupByDay(items);
+  const days = [...groupByDay(items).entries()].sort((a, b) => cmpStr(a[0], b[0]));
 
   return (
     <div className={s.page}>
@@ -145,12 +153,3 @@ export function ItineraryView({
   );
 }
 
-function groupByDay(items: ItineraryItem[]): [string, ItineraryItem[]][] {
-  const map = new Map<string, ItineraryItem[]>();
-  for (const it of items) {
-    const list = map.get(it.day) ?? [];
-    list.push(it);
-    map.set(it.day, list);
-  }
-  return [...map.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
-}

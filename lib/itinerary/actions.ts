@@ -82,13 +82,26 @@ export async function generateItinerary(): Promise<ItineraryResult> {
     assumed: dates.assumed,
   });
 
+  // Don't wipe an existing itinerary when generation produced nothing usable — e.g. a geocoder outage
+  // made every candidate drop. Surface it and leave the stored plan intact rather than replacing it
+  // with an empty one (the silent-wipe the review flagged).
+  if (items.length === 0) {
+    return {
+      ok: false,
+      error:
+        dropped > 0
+          ? "We couldn’t verify any of the suggested places just now — your itinerary is unchanged. Try again shortly."
+          : "We couldn’t build an itinerary from your trip details yet.",
+    };
+  }
+
   // Regenerate replaces: clear the user's items, then insert the fresh set.
   const { error: delErr } = await supabase.from("itinerary_items").delete().eq("user_id", user.id);
   if (delErr) {
     console.error("[itinerary] clear failed:", delErr.message);
     return { ok: false, error: "Couldn’t save the itinerary — please try again." };
   }
-  if (items.length > 0) {
+  {
     const rows = items.map((i) => ({
       user_id: user.id,
       day: i.day,

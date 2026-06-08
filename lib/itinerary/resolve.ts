@@ -11,6 +11,8 @@ import type { CandidatePlan } from "@/lib/itinerary/generate";
 
 const USER_AGENT = "keeper-itinerary/0.1 (+https://github.com/ryanssareen/Keeper)";
 const RATE_MS = 1100; // Nominatim policy: <= 1 req/s, sequential
+const GEOCODE_TIMEOUT_MS = 8000; // a hung Nominatim connection must not block the whole run
+const MAX_GEOCODES = 40; // cap total un-cached geocodes so worst-case wall time stays well under the function budget
 
 const sig = (s: string): string[] =>
   s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((t) => t.length >= 4);
@@ -28,8 +30,12 @@ export function assessGeocodeHit(query: string, raw: unknown): { lat: number; ln
   const lng = Number(first.lon);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
+  // Script check FIRST: a non-Latin-script name (Japanese, Arabic, …) can't be reliably token-matched
+  // against a possibly-romanized result, so accept it on geocode-success. Only Latin-script queries go
+  // through the name-token match. (Fixes the U0 false-drop for CJK names + the all-short-token case.)
+  if (!/[A-Za-z]/.test(query)) return { lat, lng };
   const qTokens = sig(query);
-  if (qTokens.length === 0) return { lat, lng }; // non-Latin query: accept on geocode-success
+  if (qTokens.length === 0) return { lat, lng };
   const hay = `${String(first.name ?? "")} ${String(first.display_name ?? "")}`.toLowerCase();
   return qTokens.some((t) => hay.includes(t)) ? { lat, lng } : null;
 }
@@ -40,6 +46,7 @@ async function geocodeOne(localName: string, city: string): Promise<{ lat: numbe
   try {
     const res = await fetch(buildGeocodeUrl(`${localName}, ${city}`), {
       headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+      signal: AbortSignal.timeout(GEOCODE_TIMEOUT_MS),
     });
     if (!res.ok) return null;
     return assessGeocodeHit(localName, await res.json());
@@ -78,6 +85,7 @@ export async function resolveCandidates(
   const items: MonitorableItem[] = [];
   let dropped = 0;
   let firstCall = true;
+  let geocodeCount = 0;
 
   for (const day of plan.days) {
     for (const place of day.places) {
@@ -85,9 +93,14 @@ export async function resolveCandidates(
       let hit: { lat: number; lng: number } | null;
       if (cache.has(key)) {
         hit = cache.get(key)!;
+      } else if (geocodeCount >= MAX_GEOCODES) {
+        // Hard cap on un-cached geocodes so a long trip can't blow the function time budget.
+        dropped += 1;
+        continue;
       } else {
         if (!firstCall && rateMs > 0) await sleep(rateMs);
         firstCall = false;
+        geocodeCount += 1;
         hit = await geocode(place.localName, city);
         cache.set(key, hit);
       }
