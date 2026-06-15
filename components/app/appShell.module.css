@@ -38,7 +38,19 @@
 .crumbs b { color: var(--text-strong); font-weight: 600; }
 .headActions { display: flex; gap: 8px; }
 
+/* Mobile-only top bar (settings + sign-out). Hidden on desktop, where the rail carries these. */
+.mobileBar { display: none; }
+.mobileBarActions { display: flex; align-items: center; gap: 8px; }
+
 @media (max-width: 860px) {
   .app { padding-left: 0; }
   .rail { display: none; }
+  .mobileBar {
+    display: flex; align-items: center; justify-content: space-between;
+    height: 56px; padding: 0 16px; background: #fff;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 30;
+  }
+  /* Sit the existing sticky header below the mobile bar so they stack instead of overlapping. */
+  .mainHead { top: 56px; }
 }

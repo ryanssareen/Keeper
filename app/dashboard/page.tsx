@@ -77,6 +77,14 @@ export default async function DashboardPage({
   // flow dead-ends here (and the "arm a watch" CTA loops straight back to /onboarding).
   if (watches.length === 0) {
     const onboarding = await loadOnboarding();
+
+    // A brand-new account that has never touched onboarding (no row at all) should land IN onboarding,
+    // not on this empty "no trips" page. Right after signup this is the difference between being guided
+    // to set up a trip and being dropped on a dead-end. Once the wizard autosaves a step — or the user
+    // explicitly skips (which writes a marker row) — a row exists and we fall through to the CTA below,
+    // so this never loops.
+    if (!onboarding) redirect("/onboarding");
+
     const trip = onboarding?.completed && onboarding.answers?.dest ? onboarding.answers : null;
 
     if (trip) {

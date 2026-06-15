@@ -8,7 +8,7 @@
 /* ---------- top bar ---------- */
 .obTop { height: 64px; border-bottom: 1px solid var(--border); background: #fff; display: flex; align-items: center; }
 .obTopInner { display: flex; align-items: center; justify-content: space-between; width: 100%; max-width: 640px; margin-inline: auto; padding: 0 24px; }
-.obSkip { font-size: 13px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; }
+.obSkip { font-size: 13px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; padding: 0; font-family: inherit; cursor: pointer; }
 .obSkip:hover { color: var(--text-strong); }
 
 /* ---------- shell ---------- */
