@@ -10,6 +10,13 @@ const SettingsIcon = () => (
   </svg>
 );
 
+const SignOutIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
+    <path d="M7 15.5H4a1.5 1.5 0 0 1-1.5-1.5V4A1.5 1.5 0 0 1 4 2.5h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M11 12.5 14.5 9 11 5.5M14 9H6.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 export interface ShellUser {
   name: string;
   email: string;
@@ -61,16 +68,28 @@ export function AppShell({
           </Link>
           <form action={signOut}>
             <button className={s.signout} type="submit" title="Sign out" aria-label="Sign out">
-              <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
-                <path d="M7 15.5H4a1.5 1.5 0 0 1-1.5-1.5V4A1.5 1.5 0 0 1 4 2.5h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                <path d="M11 12.5 14.5 9 11 5.5M14 9H6.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+              <SignOutIcon />
             </button>
           </form>
         </div>
       </aside>
 
       <main className={s.main}>
+        {/* Mobile-only top bar. The left rail (which holds settings + sign-out) is display:none below
+            860px, so without this there is no way to reach settings or log out on a phone. */}
+        <div className={s.mobileBar}>
+          <Logo href="/dashboard" />
+          <div className={s.mobileBarActions}>
+            <Link className={s.iconBtn} href="/settings" title="Settings" aria-label="Settings">
+              <SettingsIcon />
+            </Link>
+            <form action={signOut}>
+              <button className={s.signout} type="submit" title="Sign out" aria-label="Sign out">
+                <SignOutIcon />
+              </button>
+            </form>
+          </div>
+        </div>
         <div className={s.mainHead}>
           <div className={s.crumbs}>{header}</div>
           {headerActions ? <div className={s.headActions}>{headerActions}</div> : null}

@@ -51,7 +51,11 @@ export function OnboardingWizard({
   initialAnswers?: Partial<Answers>;
   initialStep?: number;
 }): React.ReactElement {
-  const [step, setStep] = useState(initialStep ?? 0);
+  // Re-enter at the first question, never on the terminal "All set" recap (step 5). A finished trip
+  // saves step 5, so without this clamp clicking "New watch" / "Edit trip" dropped the user straight
+  // onto the old confirmation screen — it never asked "where are you going" again. Their previous
+  // answers are still preloaded (initialAnswers), so step 0 lets them review and change everything.
+  const [step, setStep] = useState(initialStep != null && initialStep < 5 ? initialStep : 0);
   const [answers, setAnswers] = useState<Answers>({ ...DEFAULTS, ...initialAnswers });
   const [showCustom, setShowCustom] = useState(false);
   const [destQuery, setDestQuery] = useState(

@@ -29,8 +29,13 @@ describe("saveOnboarding", () => {
     expect(from).toHaveBeenCalledWith("onboarding");
     expect(upsert).toHaveBeenCalledTimes(1);
     const [row, opts] = upsert.mock.calls[0]!;
-    expect(row).toMatchObject({ user_id: "user-123", answers, step: 2, completed: false });
+    expect(row).toMatchObject({ user_id: "user-123", answers, step: 2 });
     expect(typeof row.updated_at).toBe("string");
+    // An intermediate autosave must NOT write `completed` at all. These calls are fire-and-forget, so
+    // one entering the last step can land after the final completed=true write; carrying completed=false
+    // would flip a just-finished trip back to incomplete and make it vanish from the dashboard. Omitting
+    // the column means the upsert UPDATE never touches it, keeping completion monotonic.
+    expect(row).not.toHaveProperty("completed");
     // Conflict target must be user_id so each step advance overwrites the same row (one row per user).
     expect(opts).toEqual({ onConflict: "user_id" });
     expect(result).toEqual({ ok: true });
