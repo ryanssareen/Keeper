@@ -48,9 +48,21 @@ async function geocodeOne(localName: string, city: string): Promise<{ lat: numbe
       headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
       signal: AbortSignal.timeout(GEOCODE_TIMEOUT_MS),
     });
-    if (!res.ok) return null;
-    return assessGeocodeHit(localName, await res.json());
-  } catch {
+    if (!res.ok) {
+      // 403/429 here is the classic "Nominatim blocks datacenter IPs" failure in serverless prod.
+      console.warn(`[itinerary.geocode] http_error ${JSON.stringify({ q: localName, status: res.status })}`);
+      return null;
+    }
+    const raw = await res.json();
+    const hit = assessGeocodeHit(localName, raw);
+    if (!hit) {
+      const reason = !Array.isArray(raw) || raw.length === 0 ? "zero_results" : "name_mismatch";
+      console.warn(`[itinerary.geocode] dropped ${JSON.stringify({ q: localName, reason })}`);
+    }
+    return hit;
+  } catch (e) {
+    const err = e instanceof Error ? `${e.name}: ${e.message}` : "unknown";
+    console.warn(`[itinerary.geocode] network_error ${JSON.stringify({ q: localName, err })}`);
     return null;
   }
 }
@@ -86,9 +98,12 @@ export async function resolveCandidates(
   let dropped = 0;
   let firstCall = true;
   let geocodeCount = 0;
+  let totalPlaces = 0;
+  let noZone = 0;
 
   for (const day of plan.days) {
     for (const place of day.places) {
+      totalPlaces += 1;
       const key = `${place.localName.toLowerCase()}|${city.toLowerCase()}`;
       let hit: { lat: number; lng: number } | null;
       if (cache.has(key)) {
@@ -111,6 +126,7 @@ export async function resolveCandidates(
       const zone = safeZone(hit.lat, hit.lng);
       if (!zone) {
         dropped += 1;
+        noZone += 1;
         continue;
       }
       const candidate = {
@@ -129,5 +145,18 @@ export async function resolveCandidates(
       else dropped += 1;
     }
   }
+  // One line per run so a prod failure is diagnosable from Vercel runtime logs: how many candidates came
+  // in, how many we actually geocoded (vs cache), how many survived, and how many hit the geocode cap.
+  console.info(
+    `[itinerary.resolve] summary ${JSON.stringify({
+      city,
+      totalPlaces,
+      geocoded: geocodeCount,
+      capped: geocodeCount >= MAX_GEOCODES,
+      noZone,
+      accepted: items.length,
+      dropped,
+    })}`,
+  );
   return { items, dropped };
 }
