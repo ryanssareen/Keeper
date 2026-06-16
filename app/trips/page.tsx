@@ -78,7 +78,10 @@ export default async function TripsPage(): Promise<React.ReactElement> {
         <header className={s.tripHead}>
           <span className={s.who}>Your trip</span>
           <h1>{trip.dest}{trip.country ? `, ${trip.country}` : ""}</h1>
-          <p>Live flight status, your stay, and every document in one place.</p>
+          <p>
+            {trip.startDate && trip.endDate ? `${trip.startDate} → ${trip.endDate} · ` : ""}
+            Live flight status, your stay, and every document in one place.
+          </p>
         </header>
 
         <div className={s.cards}>

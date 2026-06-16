@@ -21,7 +21,7 @@ export default async function OnboardingPage(): Promise<React.ReactElement> {
           </form>
         </div>
       </div>
-      <OnboardingWizard initialAnswers={saved?.answers} initialStep={saved?.step} />
+      <OnboardingWizard initialAnswers={saved?.answers} initialStep={saved?.step} initialCompleted={saved?.completed} />
     </div>
   );
 }

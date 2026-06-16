@@ -20,6 +20,10 @@ export function TripSummary({ answers }: { answers: Partial<OnboardingAnswers> }
 
   const showFlight = answers.flight === "Booked" && (answers.flightNo || answers.flightDate);
   const showStay = answers.hotel === "Booked" && (answers.hotelName || answers.hotelIn);
+  const dates =
+    answers.startDate && answers.endDate
+      ? `${answers.startDate} → ${answers.endDate}`
+      : answers.startDate || answers.endDate || "—";
 
   return (
     <div className={s.wrap}>
@@ -30,6 +34,7 @@ export function TripSummary({ answers }: { answers: Partial<OnboardingAnswers> }
       </div>
 
       <dl className={s.grid}>
+        <div className={s.cell}><dt>Dates</dt><dd>{dates}</dd></div>
         <div className={s.cell}><dt>Travelers</dt><dd>{answers.party || "—"}</dd></div>
         <div className={s.cell}><dt>Destination</dt><dd>{answers.code || "—"}</dd></div>
         <div className={s.cell}><dt>Flight</dt><dd>{flight}</dd></div>

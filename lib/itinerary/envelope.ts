@@ -25,11 +25,16 @@ const parseDate = (s?: string | null): string | null => {
   return dt.isValid ? dt.toISODate() : null;
 };
 
-/** Derive the trip date range from hotel dates, falling back to the flight date; null when fully sparse. */
+/** Derive the trip date range. Prefer the explicit trip dates the user now sets in onboarding; fall back
+ * to hotel dates, then the flight date, for legacy rows saved before those fields existed; null when sparse. */
 export function deriveTripDates(
   answers: Partial<OnboardingAnswers>,
 ): { startDate: string; endDate: string; assumed: string[] } | null {
   const assumed: string[] = [];
+  const tstart = parseDate(answers.startDate);
+  const tend = parseDate(answers.endDate);
+  if (tstart && tend) return { startDate: tstart, endDate: tend, assumed };
+
   const hin = parseDate(answers.hotelIn);
   const hout = parseDate(answers.hotelOut);
   const fdate = parseDate(answers.flightDate);

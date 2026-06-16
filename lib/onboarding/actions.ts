@@ -8,6 +8,8 @@ export type OnboardingAnswers = {
   dest: string;
   country: string;
   code: string;
+  startDate: string; // trip start (depart) — YYYY-MM-DD, mandatory
+  endDate: string; // trip end (return) — YYYY-MM-DD, mandatory
   flight: string;
   flightNo: string;
   flightDate: string;
