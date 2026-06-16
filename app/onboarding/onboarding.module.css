@@ -86,6 +86,18 @@
   padding-left: 51px; margin-top: 16px; font-size: 13.5px; line-height: 1.5; color: var(--red-700);
 }
 
+/* ---------- editable summary (re-entry for a finished trip) ---------- */
+.editHead { margin-bottom: 22px; }
+.editHead h1 { font-size: 28px; letter-spacing: -0.03em; margin-top: 6px; }
+.editLede { font-size: 14.5px; color: var(--text-muted); margin-top: 8px; line-height: 1.55; max-width: 52ch; }
+.editCard { background: #fff; border: 1px solid var(--border); border-radius: 18px; padding: 18px; margin-bottom: 16px; box-shadow: var(--shadow-xs); }
+.editLabel { display: block; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-faint); margin-bottom: 12px; }
+.editCard .opts { padding-left: 0; margin-top: 0; }
+
+/* "· required" hint on revealed flight/hotel detail cards + the inline gating message. */
+.req { color: var(--red-600); font-style: normal; font-size: 12.5px; }
+p.req { margin-top: 4px; }
+
 /* ---------- conditional detail reveal ---------- */
 .detailReveal { display: none; margin-top: 14px; padding-left: 51px; }
 .detailReveal.show { display: block; animation: rise var(--dur-base) var(--ease-out); }

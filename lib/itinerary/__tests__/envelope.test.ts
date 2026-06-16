@@ -19,6 +19,26 @@ const item = (day: string, title = "X"): MonitorableItem => ({
 const localHour = (utcIso: string): number => DateTime.fromISO(utcIso, { zone: "utc" }).setZone(ZONE).hour;
 
 describe("deriveTripDates — defensive against free-text onboarding strings", () => {
+  it("prefers the explicit trip dates the user now sets, over hotel/flight inference", () => {
+    expect(
+      deriveTripDates({
+        startDate: "2026-07-01",
+        endDate: "2026-07-08",
+        hotelIn: "2026-06-09",
+        hotelOut: "2026-06-12",
+        flightDate: "2026-06-09",
+      }),
+    ).toEqual({ startDate: "2026-07-01", endDate: "2026-07-08", assumed: [] });
+  });
+
+  it("still falls back to hotel dates for legacy rows without explicit trip dates", () => {
+    expect(deriveTripDates({ hotelIn: "2026-06-09", hotelOut: "2026-06-12" })).toEqual({
+      startDate: "2026-06-09",
+      endDate: "2026-06-12",
+      assumed: [],
+    });
+  });
+
   it("uses hotel check-in/out when both parse", () => {
     expect(deriveTripDates({ hotelIn: "2026-06-09", hotelOut: "2026-06-12" })).toEqual({
       startDate: "2026-06-09",
