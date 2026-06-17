@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { loadOnboarding } from "@/lib/onboarding/queries";
 import { fetchFlight } from "@/lib/adapters/flight";
 import { getArmRateLimiter } from "@/lib/security/ratelimit";
-import { generateCandidates, type GenerationAnchors } from "@/lib/itinerary/generate";
+import { generateCandidates, resolveLlmProvider, type GenerationAnchors } from "@/lib/itinerary/generate";
 import { deriveTripDates } from "@/lib/itinerary/envelope";
 import { assembleItinerary } from "@/lib/itinerary/assemble";
 import { isItemStatus } from "@/lib/itinerary/itinerary";
@@ -70,11 +70,22 @@ export async function generateItinerary(): Promise<ItineraryResult> {
     party: answers.party ?? "Solo",
   };
 
+  const provider = resolveLlmProvider();
   const gen = await generateCandidates(anchors);
   if (gen.kind === "rate_limited") return { ok: false, error: "Generation is busy right now — try again shortly." };
-  if (gen.kind !== "ok") return { ok: false, error: "Couldn’t generate an itinerary — please try again." };
+  if (gen.kind !== "ok") {
+    console.error(`[itinerary] generation failed ${JSON.stringify({ provider, city: anchors.city, days: anchors.days.length })}`);
+    return { ok: false, error: "Couldn’t generate an itinerary — please try again." };
+  }
 
-  const { items, dropped, advisories } = await assembleItinerary(gen.data, {
+  const candidateCount = gen.data.days.reduce((n, d) => n + d.places.length, 0);
+  // A stub provider in production means GROQ_API_KEY isn't set — the stub emits generic placeholder
+  // places that can't geocode, so the whole run drops. Flag it loudly; it's a config issue, not a bug.
+  if (provider === "stub") {
+    console.warn(`[itinerary] using STUB generator (GROQ_API_KEY unset) — places will likely fail geocoding`);
+  }
+
+  const { items, dropped, dropResolve, dropEnvelope, advisories } = await assembleItinerary(gen.data, {
     city: answers.dest,
     startDate: dates.startDate,
     endDate: dates.endDate,
@@ -82,17 +93,36 @@ export async function generateItinerary(): Promise<ItineraryResult> {
     assumed: dates.assumed,
   });
 
+  console.info(
+    `[itinerary] run ${JSON.stringify({
+      provider,
+      city: anchors.city,
+      days: anchors.days.length,
+      candidates: candidateCount,
+      dropResolve,
+      dropEnvelope,
+      kept: items.length,
+    })}`,
+  );
+
   // Don't wipe an existing itinerary when generation produced nothing usable — e.g. a geocoder outage
   // made every candidate drop. Surface it and leave the stored plan intact rather than replacing it
-  // with an empty one (the silent-wipe the review flagged).
+  // with an empty one (the silent-wipe the review flagged). Distinguish the two failure shapes so the
+  // message points at the real cause: places that wouldn't verify vs. places that wouldn't fit the dates.
   if (items.length === 0) {
-    return {
-      ok: false,
-      error:
-        dropped > 0
-          ? "We couldn’t verify any of the suggested places just now — your itinerary is unchanged. Try again shortly."
-          : "We couldn’t build an itinerary from your trip details yet.",
-    };
+    if (dropResolve > 0 && dropEnvelope === 0) {
+      return {
+        ok: false,
+        error: "We couldn’t verify any of the suggested places just now — your itinerary is unchanged. Try again shortly.",
+      };
+    }
+    if (dropEnvelope > 0) {
+      return {
+        ok: false,
+        error: "We found places but none fit within your trip dates — check your travel dates and try again.",
+      };
+    }
+    return { ok: false, error: "We couldn’t build an itinerary from your trip details yet." };
   }
 
   // Regenerate replaces: clear the user's items, then insert the fresh set.

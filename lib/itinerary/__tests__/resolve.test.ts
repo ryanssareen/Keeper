@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { assessGeocodeHit, resolveCandidates } from "@/lib/itinerary/resolve";
+import { assessGeocodeHit, assessPhotonHit, resolveCandidates } from "@/lib/itinerary/resolve";
 import type { CandidatePlan } from "@/lib/itinerary/generate";
 
 // A real, low-importance POI hit (the U0 regression: importance ~0 but a genuine place).
@@ -37,6 +37,25 @@ describe("assessGeocodeHit — geocode-success, not importance (U0 fix)", () => 
     // Old code: "東京タワー" forms a >=4-char token, romanized "Tokyo Tower" has no overlap -> dropped.
     const romanized = [{ lat: "35.6586", lon: "139.7454", name: "Tokyo Tower", display_name: "Tokyo Tower, Minato, Tokyo" }];
     expect(assessGeocodeHit("東京タワー", romanized)).toEqual({ lat: 35.6586, lng: 139.7454 });
+  });
+});
+
+describe("assessPhotonHit — same acceptance against Photon GeoJSON ([lon, lat] coords)", () => {
+  it("accepts a correctly-named Photon feature and maps [lon,lat] → {lat,lng}", () => {
+    const fc = { features: [{ geometry: { coordinates: [-9.216, 38.6916] }, properties: { name: "Torre de Belém", city: "Lisboa", country: "Portugal" } }] };
+    expect(assessPhotonHit("Torre de Belém", fc)).toEqual({ lat: 38.6916, lng: -9.216 });
+  });
+
+  it("drops empty collections and clearly-wrong Latin matches", () => {
+    expect(assessPhotonHit("Pujol", { features: [] })).toBeNull();
+    expect(assessPhotonHit("Pujol", {})).toBeNull();
+    const wrong = { features: [{ geometry: { coordinates: [-99.1, 19.4] }, properties: { name: "Calle Falsa" } }] };
+    expect(assessPhotonHit("Pujol", wrong)).toBeNull();
+  });
+
+  it("accepts a non-Latin query on geocode-success alone", () => {
+    const fc = { features: [{ geometry: { coordinates: [139.7454, 35.6586] }, properties: { name: "Tokyo Tower" } }] };
+    expect(assessPhotonHit("東京タワー", fc)).toEqual({ lat: 35.6586, lng: 139.7454 });
   });
 });
 

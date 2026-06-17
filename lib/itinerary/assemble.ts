@@ -22,7 +22,14 @@ export async function assembleItinerary(
   plan: CandidatePlan,
   ctx: AssembleCtx,
   deps: ResolveDeps = {},
-): Promise<{ items: MonitorableItem[]; dropped: number; advisories: Advisory[]; assumed: string[] }> {
+): Promise<{
+  items: MonitorableItem[];
+  dropped: number;
+  dropResolve: number;
+  dropEnvelope: number;
+  advisories: Advisory[];
+  assumed: string[];
+}> {
   const { items: resolved, dropped: dropResolve } = await resolveCandidates(plan, ctx.city, deps);
   const zone = ctx.ianaZone ?? resolved[0]?.ianaZone ?? "UTC";
   const { scheduled, dropped: dropEnvelope, assumed } = scheduleWithinEnvelope(resolved, {
@@ -36,6 +43,8 @@ export async function assembleItinerary(
   return {
     items: scheduled,
     dropped: dropResolve + dropEnvelope,
+    dropResolve,
+    dropEnvelope,
     advisories: checkFeasibility(scheduled),
     assumed,
   };
