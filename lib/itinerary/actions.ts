@@ -52,8 +52,15 @@ export async function generateItinerary(): Promise<ItineraryResult> {
   const answers = onboarding?.completed ? onboarding.answers : null;
   if (!answers?.dest) return { ok: false, error: "Set up your trip first." };
 
-  const dates = deriveTripDates(answers);
-  if (!dates) return { ok: false, error: "Add your trip dates (a hotel or flight) so we can plan around them." };
+  // Prefer the trip's real dates; if none are derivable at all (a legacy/date-less trip), assume a short
+  // trip rather than dead-ending — the UI already promises this ("we'll assume a short trip"). The
+  // advisory tells the user their dates were assumed so they can tighten them.
+  const dates =
+    deriveTripDates(answers) ?? {
+      startDate: DateTime.now().toISODate()!,
+      endDate: DateTime.now().plus({ days: 2 }).toISODate()!,
+      assumed: ["trip dates (none set — assumed a 3-day trip starting today; add dates for tighter planning)"],
+    };
 
   // Raw flight instants for the arrival-day floor (loadTripFlight's view model drops them).
   let arrivalInstant: string | null = null;

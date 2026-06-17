@@ -26,16 +26,19 @@ export default async function ItineraryPage(): Promise<React.ReactElement> {
   const trip = onboarding?.completed && onboarding.answers?.dest ? onboarding.answers : null;
   const items = trip ? await loadItinerary() : [];
 
+  const tripDates =
+    trip && trip.startDate && trip.endDate ? `${trip.startDate} → ${trip.endDate}` : null;
   const anchors = trip
     ? [
         trip.dest,
+        tripDates,
         trip.flight === "Booked" && trip.flightNo ? `flight ${trip.flightNo}` : null,
         trip.hotelName ? `hotel ${trip.hotelName}` : null,
       ]
         .filter(Boolean)
         .join(" · ")
     : "";
-  const hasDates = Boolean(trip && (trip.hotelIn || trip.flightDate));
+  const hasDates = Boolean(trip && (trip.startDate || trip.endDate || trip.hotelIn || trip.flightDate));
 
   const rail = (
     <nav className={s.rail}>
