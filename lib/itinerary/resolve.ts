@@ -18,10 +18,22 @@ const sig = (s: string): string[] =>
   s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((t) => t.length >= 4);
 
 /**
- * U0-corrected acceptance. Pure — testable with fixtures, no network. Accepts when the first hit has
- * valid coordinates AND (for a Latin-script query) shares a significant name token, so real POIs at
- * importance ~0 are kept while clearly-wrong matches are dropped. A non-Latin-script query (e.g. a
- * Japanese local name) can't token-match, so it's accepted on geocode-success alone.
+ * Name-match core (U0): a non-Latin-script query (Japanese, Arabic, …) can't be reliably token-matched
+ * against a possibly-romanized result, so it's accepted on geocode-success alone; a Latin-script query
+ * must share a significant name token with the result text so clearly-wrong matches are dropped.
+ */
+function nameMatches(query: string, hay: string): boolean {
+  if (!/[A-Za-z]/.test(query)) return true;
+  const qTokens = sig(query);
+  if (qTokens.length === 0) return true;
+  const h = hay.toLowerCase();
+  return qTokens.some((t) => h.includes(t));
+}
+
+/**
+ * U0-corrected acceptance for a Nominatim result. Pure — testable with fixtures, no network. Accepts
+ * when the first hit has valid coordinates AND clears the name-match, so real POIs at importance ~0 are
+ * kept while clearly-wrong matches are dropped.
  */
 export function assessGeocodeHit(query: string, raw: unknown): { lat: number; lng: number } | null {
   if (!Array.isArray(raw) || raw.length === 0) return null;
@@ -29,42 +41,76 @@ export function assessGeocodeHit(query: string, raw: unknown): { lat: number; ln
   const lat = Number(first.lat);
   const lng = Number(first.lon);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-
-  // Script check FIRST: a non-Latin-script name (Japanese, Arabic, …) can't be reliably token-matched
-  // against a possibly-romanized result, so accept it on geocode-success. Only Latin-script queries go
-  // through the name-token match. (Fixes the U0 false-drop for CJK names + the all-short-token case.)
-  if (!/[A-Za-z]/.test(query)) return { lat, lng };
-  const qTokens = sig(query);
-  if (qTokens.length === 0) return { lat, lng };
-  const hay = `${String(first.name ?? "")} ${String(first.display_name ?? "")}`.toLowerCase();
-  return qTokens.some((t) => hay.includes(t)) ? { lat, lng } : null;
+  const hay = `${String(first.name ?? "")} ${String(first.display_name ?? "")}`;
+  return nameMatches(query, hay) ? { lat, lng } : null;
 }
 
-async function geocodeOne(localName: string, city: string): Promise<{ lat: number; lng: number } | null> {
-  // Query "<local name>, <city>" for Nominatim disambiguation, but name-match on the place name only
-  // (the city token would otherwise trivially match every hit in that city).
+/** Same acceptance against a Photon (komoot) GeoJSON FeatureCollection — its coords are [lon, lat]. */
+export function assessPhotonHit(query: string, raw: unknown): { lat: number; lng: number } | null {
+  const features = (raw as { features?: unknown })?.features;
+  if (!Array.isArray(features) || features.length === 0) return null;
+  const f = (features[0] ?? {}) as { geometry?: { coordinates?: unknown }; properties?: Record<string, unknown> };
+  const coords = f.geometry?.coordinates;
+  if (!Array.isArray(coords)) return null;
+  const lng = Number(coords[0]);
+  const lat = Number(coords[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const p = f.properties ?? {};
+  const hay = ["name", "street", "city", "state", "country", "osm_value"].map((k) => String(p[k] ?? "")).join(" ");
+  return nameMatches(query, hay) ? { lat, lng } : null;
+}
+
+const photonUrl = (query: string): string =>
+  `https://photon.komoot.io/api/?q=${encodeURIComponent(query.slice(0, 200))}&limit=1`;
+
+/** Geocode via Nominatim. Logs hard failures (403/429 = the classic datacenter-IP block; timeouts). */
+async function geocodeNominatim(localName: string, city: string): Promise<{ lat: number; lng: number } | null> {
   try {
     const res = await fetch(buildGeocodeUrl(`${localName}, ${city}`), {
       headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
       signal: AbortSignal.timeout(GEOCODE_TIMEOUT_MS),
     });
     if (!res.ok) {
-      // 403/429 here is the classic "Nominatim blocks datacenter IPs" failure in serverless prod.
-      console.warn(`[itinerary.geocode] http_error ${JSON.stringify({ q: localName, status: res.status })}`);
+      console.warn(`[itinerary.geocode] nominatim http_error ${JSON.stringify({ q: localName, status: res.status })}`);
       return null;
     }
-    const raw = await res.json();
-    const hit = assessGeocodeHit(localName, raw);
-    if (!hit) {
-      const reason = !Array.isArray(raw) || raw.length === 0 ? "zero_results" : "name_mismatch";
-      console.warn(`[itinerary.geocode] dropped ${JSON.stringify({ q: localName, reason })}`);
-    }
-    return hit;
+    return assessGeocodeHit(localName, await res.json());
   } catch (e) {
     const err = e instanceof Error ? `${e.name}: ${e.message}` : "unknown";
-    console.warn(`[itinerary.geocode] network_error ${JSON.stringify({ q: localName, err })}`);
+    console.warn(`[itinerary.geocode] nominatim network_error ${JSON.stringify({ q: localName, err })}`);
     return null;
   }
+}
+
+/** Fallback geocoder (keyless, datacenter-tolerant) used when Nominatim blocks or misses. */
+async function geocodePhoton(localName: string, city: string): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const res = await fetch(photonUrl(`${localName}, ${city}`), {
+      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+      signal: AbortSignal.timeout(GEOCODE_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      console.warn(`[itinerary.geocode] photon http_error ${JSON.stringify({ q: localName, status: res.status })}`);
+      return null;
+    }
+    return assessPhotonHit(localName, await res.json());
+  } catch (e) {
+    const err = e instanceof Error ? `${e.name}: ${e.message}` : "unknown";
+    console.warn(`[itinerary.geocode] photon network_error ${JSON.stringify({ q: localName, err })}`);
+    return null;
+  }
+}
+
+// Query "<local name>, <city>" for disambiguation, but name-match on the place name only (the city token
+// would otherwise trivially match every hit in that city). Nominatim first; on a block/miss, fall back to
+// Photon — so a serverless egress block against one provider can't silently drop the whole itinerary.
+async function geocodeOne(localName: string, city: string): Promise<{ lat: number; lng: number } | null> {
+  const nominatim = await geocodeNominatim(localName, city);
+  if (nominatim) return nominatim;
+  const photon = await geocodePhoton(localName, city);
+  if (photon) console.info(`[itinerary.geocode] photon_fallback_hit ${JSON.stringify({ q: localName })}`);
+  else console.warn(`[itinerary.geocode] dropped ${JSON.stringify({ q: localName })}`);
+  return photon;
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
