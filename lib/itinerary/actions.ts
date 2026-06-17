@@ -171,10 +171,22 @@ export async function deleteItineraryItem(id: string): Promise<ActionResult> {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "You need to be signed in." };
 
-  const { error } = await supabase.from("itinerary_items").delete().eq("id", id).eq("user_id", user.id);
+  // `.select()` returns the rows actually deleted — so a 0-row delete (e.g. an RLS/grant mismatch that
+  // Postgres reports without an error) surfaces as a real failure instead of a silent "success" that
+  // leaves the item on screen.
+  const { data, error } = await supabase
+    .from("itinerary_items")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .select("id");
   if (error) {
     console.error("[itinerary] delete failed:", error.message);
     return { ok: false, error: "Couldn’t remove that item — please try again." };
+  }
+  if (!data || data.length === 0) {
+    console.warn(`[itinerary] delete removed 0 rows ${JSON.stringify({ id })}`);
+    return { ok: false, error: "Couldn’t remove that item — please reload and try again." };
   }
   revalidatePath("/trips/itinerary");
   return { ok: true };
@@ -189,14 +201,19 @@ export async function setItemStatus(id: string, status: string): Promise<ActionR
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "You need to be signed in." };
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("itinerary_items")
     .update({ status, updated_at: new Date().toISOString() })
     .eq("id", id)
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .select("id");
   if (error) {
     console.error("[itinerary] status update failed:", error.message);
     return { ok: false, error: "Couldn’t update that item — please try again." };
+  }
+  if (!data || data.length === 0) {
+    console.warn(`[itinerary] status update changed 0 rows ${JSON.stringify({ id, status })}`);
+    return { ok: false, error: "Couldn’t update that item — please reload and try again." };
   }
   revalidatePath("/trips/itinerary");
   return { ok: true };

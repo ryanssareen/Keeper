@@ -36,6 +36,9 @@ export function ItineraryView({
   // the value we just persisted); regenerate creates new item ids, so stale overrides can't linger.
   const [statusOverride, setStatusOverride] = useState<Record<string, ItemStatus>>({});
   const statusOf = (it: ItineraryItem): ItemStatus => statusOverride[it.id] ?? it.status;
+  // Optimistically hide a removed item so it disappears on click; if the server delete fails (or removed
+  // 0 rows), we un-hide it and show the error — so the row never silently lingers OR vanishes-then-returns.
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
 
   async function onGenerate(): Promise<void> {
     if (inFlight.current) return; // guard a double-click before `busy` disables the button
@@ -85,16 +88,33 @@ export function ItineraryView({
     setPendingId(id);
     setError(null);
     setSummary(null);
+    setRemovedIds((prev) => new Set(prev).add(id)); // optimistic hide
     try {
       const res = await deleteItineraryItem(id);
-      if (!res.ok) setError(res.error);
-      else router.refresh();
+      if (!res.ok) {
+        setRemovedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id); // un-hide on failure
+          return next;
+        });
+        setError(res.error);
+      } else {
+        router.refresh();
+      }
+    } catch {
+      setRemovedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      setError("Couldn’t remove that item — please try again.");
     } finally {
       setPendingId(null);
     }
   }
 
-  const days = [...groupByDay(items).entries()].sort((a, b) => cmpStr(a[0], b[0]));
+  const visible = items.filter((it) => !removedIds.has(it.id));
+  const days = [...groupByDay(visible).entries()].sort((a, b) => cmpStr(a[0], b[0]));
 
   return (
     <div className={s.page}>
@@ -129,7 +149,7 @@ export function ItineraryView({
         </ul>
       ) : null}
 
-      {items.length === 0 ? (
+      {visible.length === 0 ? (
         <div className={s.empty}>
           <p>No itinerary yet. <b>Plan my trip</b> builds a day-by-day plan from your bookings — every place resolved to a real spot Keeper can watch.</p>
         </div>
