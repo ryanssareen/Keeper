@@ -1,6 +1,7 @@
 "use server";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import type { ItineraryPrefs } from "@/lib/itinerary/itinerary";
 
 export type OnboardingAnswers = {
   trip: string;
@@ -18,6 +19,7 @@ export type OnboardingAnswers = {
   hotelName: string;
   hotelIn: string;
   hotelOut: string;
+  itineraryPrefs?: ItineraryPrefs; // optional refinements for itinerary generation (set on the itinerary page)
 };
 
 export type OnboardingRow = {

@@ -8,7 +8,7 @@ import { getArmRateLimiter } from "@/lib/security/ratelimit";
 import { generateCandidates, resolveLlmProvider, type GenerationAnchors } from "@/lib/itinerary/generate";
 import { deriveTripDates } from "@/lib/itinerary/envelope";
 import { assembleItinerary } from "@/lib/itinerary/assemble";
-import { isItemStatus } from "@/lib/itinerary/itinerary";
+import { isItemStatus, type ItineraryPrefs } from "@/lib/itinerary/itinerary";
 import type { Advisory } from "@/lib/itinerary/feasibility";
 
 export type ItineraryResult =
@@ -34,7 +34,7 @@ function eachDate(startDate: string, endDate: string): string[] {
  * (never on render — so it doesn't re-hit Groq on every refresh), per-user rate-limited, and it sends
  * only city + dates + party to Groq (minimum-data, not the raw hotel blob).
  */
-export async function generateItinerary(): Promise<ItineraryResult> {
+export async function generateItinerary(prefs?: ItineraryPrefs): Promise<ItineraryResult> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -51,6 +51,17 @@ export async function generateItinerary(): Promise<ItineraryResult> {
   const onboarding = await loadOnboarding();
   const answers = onboarding?.completed ? onboarding.answers : null;
   if (!answers?.dest) return { ok: false, error: "Set up your trip first." };
+
+  // Persist the refinements alongside the trip (best-effort) so a reload / regenerate keeps them. Only
+  // touch `answers` — never `completed`/`step` — so this can't disturb onboarding state.
+  const effectivePrefs = prefs ?? answers.itineraryPrefs;
+  if (prefs) {
+    const { error: prefErr } = await supabase
+      .from("onboarding")
+      .update({ answers: { ...answers, itineraryPrefs: prefs }, updated_at: new Date().toISOString() })
+      .eq("user_id", user.id);
+    if (prefErr) console.error("[itinerary] failed to persist prefs:", prefErr.message);
+  }
 
   // Prefer the trip's real dates; if none are derivable at all (a legacy/date-less trip), assume a short
   // trip rather than dead-ending — the UI already promises this ("we'll assume a short trip"). The
@@ -75,6 +86,7 @@ export async function generateItinerary(): Promise<ItineraryResult> {
     country: answers.country ?? "",
     days: eachDate(dates.startDate, dates.endDate),
     party: answers.party ?? "Solo",
+    prefs: effectivePrefs,
   };
 
   const provider = resolveLlmProvider();
