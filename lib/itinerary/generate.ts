@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ok, rateLimited, adapterError, type AdapterResult } from "@/lib/adapters/result";
-import { ITEM_KINDS, type ItemKind } from "@/lib/itinerary/itinerary";
+import { ITEM_KINDS, type ItemKind, type ItineraryPrefs, type Pace } from "@/lib/itinerary/itinerary";
 
 /**
  * LLM candidate generation for the itinerary (U2). The model is a GROUNDED CANDIDATE GENERATOR, not
@@ -16,12 +16,23 @@ import { ITEM_KINDS, type ItemKind } from "@/lib/itinerary/itinerary";
 export type CandidatePlace = { name: string; localName: string; kind: ItemKind };
 export type CandidateDay = { date: string; places: CandidatePlace[] };
 export type CandidatePlan = { days: CandidateDay[] };
-export type GenerationAnchors = { city: string; country: string; days: string[]; party: string };
+export type GenerationAnchors = {
+  city: string;
+  country: string;
+  days: string[];
+  party: string;
+  prefs?: ItineraryPrefs; // optional refinements (ages, interests, pace, must-sees, fixed bookings)
+};
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const MODEL = "openai/gpt-oss-120b"; // verify against /openai/v1/models before launch (KTD3)
 const TIMEOUT_MS = 60_000;
-const PER_DAY_TARGET = 8; // over-generate; U3 drops unresolved candidates (KTD4)
+
+// Per-day candidate target by pace (the user's "relaxed → packed"); default over-generates since U3 drops
+// unresolved candidates (KTD4). The booking envelope still caps how many actually fit each day.
+const PER_DAY_TARGET = 8;
+const PACE_TARGET: Record<Pace, number> = { relaxed: 5, balanced: 7, packed: 9 };
+const targetFor = (prefs?: ItineraryPrefs): number => (prefs?.pace ? PACE_TARGET[prefs.pace] : PER_DAY_TARGET);
 
 type Provider = "groq" | "stub";
 export function resolveLlmProvider(): Provider {
@@ -81,14 +92,29 @@ const JSON_SCHEMA = {
   },
 } as const;
 
-function promptFor(a: GenerationAnchors): string {
-  return [
+/** Build the generation prompt. Weaves in any optional refinements so a user with a rough idea gets a
+ * tailored plan, while an empty prefs object falls back to a generic plan from city + dates. Exported for
+ * unit testing the prompt shaping. */
+export function promptFor(a: GenerationAnchors): string {
+  const target = targetFor(a.prefs);
+  const lines = [
     `Plan a booking-anchored day-by-day itinerary for ${a.party} in ${a.city}, ${a.country}.`,
     `Days (YYYY-MM-DD): ${a.days.join(", ")}.`,
-    `For each day, propose ~${PER_DAY_TARGET} specific, real places (a MIX of headline sights AND the long tail — restaurants, cafes, viewpoints, markets, neighborhoods — that makes a trip good). Use real, specific names.`,
+    `For each day, propose ~${target} specific, real places (a MIX of headline sights AND the long tail — restaurants, cafes, viewpoints, markets, neighborhoods — that makes a trip good). Use real, specific names.`,
+  ];
+
+  const p = a.prefs;
+  if (p?.ages?.trim()) lines.push(`Travelers: ${p.ages.trim()}. Tailor picks to be age-appropriate (e.g. kid-friendly when children are present).`);
+  if (p?.interests?.length) lines.push(`Lean toward these interests: ${p.interests.join(", ")}.`);
+  if (p?.pace) lines.push(`Pace: ${p.pace} — ${p.pace === "relaxed" ? "fewer stops, more breathing room" : p.pace === "packed" ? "fit in as much as reasonable" : "a balanced day"}.`);
+  if (p?.mustSee?.trim()) lines.push(`Must include these places/areas if real and sensible: ${p.mustSee.trim()}.`);
+  if (p?.fixed?.trim()) lines.push(`The traveler has FIXED commitments at set times: ${p.fixed.trim()}. Schedule the day's other places around these and do not propose anything that clashes with them.`);
+
+  lines.push(
     `For each place give: "name" (English/display name), "localName" (the place's name in the local language exactly as it would appear on a map, for geocoding), and "kind".`,
     `Return ${a.days.length} day objects keyed to the dates above.`,
-  ].join(" ");
+  );
+  return lines.join(" ");
 }
 
 async function callGroq(messages: { role: string; content: string }[]): Promise<

@@ -2,7 +2,17 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { generateItinerary, deleteItineraryItem, setItemStatus } from "@/lib/itinerary/actions";
-import { cmpStr, groupByDay, type ItineraryItem, type ItemStatus } from "@/lib/itinerary/itinerary";
+import {
+  cmpStr,
+  groupByDay,
+  hasPrefs,
+  INTEREST_OPTIONS,
+  PACE_OPTIONS,
+  type ItineraryItem,
+  type ItineraryPrefs,
+  type ItemStatus,
+  type Pace,
+} from "@/lib/itinerary/itinerary";
 import type { Advisory } from "@/lib/itinerary/feasibility";
 import s from "@/app/trips/itinerary/itinerary.module.css";
 
@@ -18,11 +28,15 @@ export function ItineraryView({
   anchors,
   hasDates,
   dest,
+  initialPrefs,
+  party,
 }: {
   items: ItineraryItem[];
   anchors: string;
   hasDates: boolean;
   dest: string;
+  initialPrefs?: ItineraryPrefs;
+  party?: string;
 }): React.ReactElement {
   const router = useRouter();
   const inFlight = useRef(false);
@@ -30,6 +44,17 @@ export function ItineraryView({
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<GenSummary>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  // Optional refinements (the "rough idea" path). Empty == plan from destination + dates only.
+  const [prefs, setPrefs] = useState<ItineraryPrefs>(initialPrefs ?? {});
+  const [showRefine, setShowRefine] = useState(hasPrefs(initialPrefs));
+  const patchPrefs = (p: Partial<ItineraryPrefs>): void => setPrefs((prev) => ({ ...prev, ...p }));
+  const toggleInterest = (label: string): void =>
+    setPrefs((prev) => {
+      const set = new Set(prev.interests ?? []);
+      if (set.has(label)) set.delete(label);
+      else set.add(label);
+      return { ...prev, interests: [...set] };
+    });
   // Optimistic status overlay: the tick must reflect the click instantly and hold, independent of when
   // the server refetch lands — otherwise a refresh/RSC-cache race re-renders the stale status and the
   // tick flashes on then off (issue #7). The overlay stays in sync with the server (it only ever holds
@@ -46,7 +71,7 @@ export function ItineraryView({
     setBusy(true);
     setError(null);
     try {
-      const res = await generateItinerary();
+      const res = await generateItinerary(prefs);
       if (!res.ok) {
         setError(res.error);
         return;
@@ -125,6 +150,71 @@ export function ItineraryView({
         {anchors ? <p className={s.anchors}>Using: {anchors}</p> : null}
         {!hasDates ? <p className={s.note}>We don’t have your trip dates yet — we’ll assume a short trip. Add a hotel or flight for tighter planning.</p> : null}
       </header>
+
+      <div className={s.refine}>
+        <button type="button" className={s.refineToggle} onClick={() => setShowRefine((v) => !v)} aria-expanded={showRefine}>
+          <span>Refine your plan <em>· optional</em></span>
+          <span className={s.chev} data-open={showRefine}>⌄</span>
+        </button>
+        {showRefine ? (
+          <div className={s.refineBody}>
+            <p className={s.refineLede}>Add as much or as little as you like — or just hit {items.length > 0 ? "Regenerate" : "Plan my trip"} to plan from your destination and dates.</p>
+
+            <div className={s.refineField}>
+              <label htmlFor="prefAges">Who’s going? <span className={s.refineHint}>{party ? `you said: ${party}` : "ages help us tailor picks"}</span></label>
+              <input
+                id="prefAges" className="field" type="text" placeholder="e.g. 2 adults, 1 child age 7"
+                value={prefs.ages ?? ""} onChange={(e) => patchPrefs({ ages: e.target.value })}
+              />
+            </div>
+
+            <div className={s.refineField}>
+              <span className={s.refineLabel}>Interests</span>
+              <div className={s.chips}>
+                {INTEREST_OPTIONS.map((label) => {
+                  const on = (prefs.interests ?? []).includes(label);
+                  return (
+                    <button key={label} type="button" className={`${s.chip} ${on ? s.chipOn : ""}`} aria-pressed={on} onClick={() => toggleInterest(label)}>
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className={s.refineField}>
+              <span className={s.refineLabel}>Pace</span>
+              <div className={s.segmented}>
+                {PACE_OPTIONS.map((p) => (
+                  <button
+                    key={p} type="button" aria-pressed={prefs.pace === p}
+                    className={`${s.seg} ${prefs.pace === p ? s.segOn : ""}`}
+                    onClick={() => patchPrefs({ pace: prefs.pace === p ? undefined : (p as Pace) })}
+                  >
+                    {p[0]!.toUpperCase() + p.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className={s.refineField}>
+              <label htmlFor="prefMust">Must-sees &amp; areas <span className={s.refineHint}>anything you already want in</span></label>
+              <textarea
+                id="prefMust" className="field" rows={2} placeholder="e.g. Shibuya, teamLab Planets, a ramen night in Shinjuku"
+                value={prefs.mustSee ?? ""} onChange={(e) => patchPrefs({ mustSee: e.target.value })}
+              />
+            </div>
+
+            <div className={s.refineField}>
+              <label htmlFor="prefFixed">Fixed bookings &amp; times <span className={s.refineHint}>we’ll plan around these</span></label>
+              <textarea
+                id="prefFixed" className="field" rows={2} placeholder="e.g. dinner 8pm Jul 2; museum tickets 10am Jul 1"
+                value={prefs.fixed ?? ""} onChange={(e) => patchPrefs({ fixed: e.target.value })}
+              />
+            </div>
+          </div>
+        ) : null}
+      </div>
 
       <div className={s.actions}>
         <button type="button" className="btn btn-primary" onClick={onGenerate} disabled={busy} aria-busy={busy}>

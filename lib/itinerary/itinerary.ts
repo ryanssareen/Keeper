@@ -16,6 +16,42 @@ export const isItemStatus = (v: unknown): v is ItemStatus =>
   typeof v === "string" && (ITEM_STATUSES as readonly string[]).includes(v);
 
 /**
+ * Optional refinement the user can add before generating (the "I have a rough idea" path). All fields are
+ * optional — an empty prefs object means "just plan from my destination + dates". Fed into the LLM prompt;
+ * persisted alongside the onboarding answers so a reload / regenerate keeps them.
+ */
+export const INTEREST_OPTIONS = [
+  "Food & drink",
+  "Art & museums",
+  "History",
+  "Nature & parks",
+  "Nightlife",
+  "Shopping",
+  "Architecture",
+  "Local & offbeat",
+] as const;
+export type Interest = (typeof INTEREST_OPTIONS)[number];
+
+export const PACE_OPTIONS = ["relaxed", "balanced", "packed"] as const;
+export type Pace = (typeof PACE_OPTIONS)[number];
+export const isPace = (v: unknown): v is Pace =>
+  typeof v === "string" && (PACE_OPTIONS as readonly string[]).includes(v);
+
+export type ItineraryPrefs = {
+  ages?: string; // free text, e.g. "2 adults, 1 child age 7"
+  interests?: string[]; // subset of INTEREST_OPTIONS (kept as string[] — LLM-/storage-tolerant)
+  pace?: Pace;
+  mustSee?: string; // specific places / neighborhoods to include
+  fixed?: string; // reservations or tickets at set times, e.g. "dinner 8pm Jul 2"
+};
+
+/** True when at least one refinement field is filled (drives "should we show this as set" UI). */
+export function hasPrefs(p?: ItineraryPrefs | null): boolean {
+  if (!p) return false;
+  return Boolean(p.ages?.trim() || (p.interests && p.interests.length) || p.pace || p.mustSee?.trim() || p.fixed?.trim());
+}
+
+/**
  * A MONITORABLE itinerary item: required `lat`/`lng`/`ianaZone` make a free-text-only item
  * unrepresentable (the strategy guardrail — every item resolves to a real time and place). `title`
  * and `placeName` are LLM-sourced, so they are length-bounded and treated as untrusted strings.

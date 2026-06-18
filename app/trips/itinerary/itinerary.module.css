@@ -21,6 +21,38 @@
 .actions { margin-top: 18px; }
 .actions .btn[aria-busy="true"] { opacity: 0.65; cursor: progress; }
 
+/* refine panel — optional itinerary preferences */
+.refine { margin-top: 18px; border: 1px solid var(--border); border-radius: 16px; background: #fff; box-shadow: var(--shadow-xs); overflow: hidden; }
+.refineToggle {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 16px; background: none; border: 0; cursor: pointer; font-size: 14.5px; font-weight: 600; color: var(--text-strong);
+}
+.refineToggle em { font-style: normal; font-weight: 400; font-size: 12px; color: var(--text-faint); }
+.chev { font-size: 16px; color: var(--text-faint); transition: transform 0.18s ease; }
+.chev[data-open="true"] { transform: rotate(180deg); }
+.refineBody { padding: 4px 16px 18px; display: grid; gap: 16px; border-top: 1px solid var(--hairline); }
+.refineLede { font-size: 13px; color: var(--text-muted); line-height: 1.5; padding-top: 12px; }
+.refineField { display: grid; gap: 7px; }
+.refineField > label, .refineLabel { font-size: 13px; font-weight: 600; color: var(--text-body); }
+.refineHint { font-weight: 400; font-size: 12px; color: var(--text-faint); margin-left: 6px; }
+.refineField textarea.field { resize: vertical; min-height: 38px; line-height: 1.5; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font-size: 12.5px; padding: 7px 12px; border-radius: 999px; cursor: pointer;
+  background: var(--bg-subtle); border: 1px solid var(--border); color: var(--text-body);
+}
+.chip:hover { border-color: var(--border-strong); }
+.chipOn { background: var(--text-strong); color: #fff; border-color: var(--text-strong); }
+
+.segmented { display: inline-flex; gap: 6px; }
+.seg {
+  font-size: 13px; padding: 8px 16px; border-radius: 10px; cursor: pointer;
+  background: var(--bg-subtle); border: 1px solid var(--border); color: var(--text-body);
+}
+.seg:hover { border-color: var(--border-strong); }
+.segOn { background: var(--text-strong); color: #fff; border-color: var(--text-strong); }
+
 .error { margin-top: 14px; font-size: 13.5px; color: var(--red-700); }
 .summary { margin-top: 14px; font-size: 13.5px; color: var(--text-muted); }
 .advisories { margin-top: 10px; display: grid; gap: 6px; }

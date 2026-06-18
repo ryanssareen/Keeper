@@ -67,7 +67,14 @@ export default async function ItineraryPage(): Promise<React.ReactElement> {
           <Link className="btn btn-primary btn-lg" href="/onboarding" style={{ marginTop: 18 }}>Set up your trip</Link>
         </div>
       ) : (
-        <ItineraryView items={items} anchors={anchors} hasDates={hasDates} dest={trip.dest ?? "your trip"} />
+        <ItineraryView
+          items={items}
+          anchors={anchors}
+          hasDates={hasDates}
+          dest={trip.dest ?? "your trip"}
+          initialPrefs={trip.itineraryPrefs}
+          party={trip.party}
+        />
       )}
     </AppShell>
   );
