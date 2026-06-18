@@ -118,7 +118,12 @@ export function promptFor(a: GenerationAnchors): string {
   return lines.join(" ");
 }
 
-const MAX_TOKENS = 8000; // headroom so a multi-day / "packed" plan isn't truncated into invalid JSON
+// Groq's free `on_demand` tier caps tokens-per-minute (TPM) at 8000, and it counts prompt + max_tokens
+// against that ceiling per request. The prompt is small (~600 tokens even for a 14-day trip), so cap the
+// completion well under the limit: 6000 leaves comfortable headroom AND fits the largest plan we build
+// (14 days × ~9 places ≈ 4.5k tokens). Setting this too high (or leaving Groq's default) makes a
+// multi-day request exceed 8000 and return 413 "Request too large".
+const MAX_TOKENS = 6000;
 
 type GroqResult =
   | { kind: "ok"; content: string }
@@ -193,13 +198,14 @@ export async function generateCandidates(anchors: GenerationAnchors): Promise<Ad
 
   const messages = [{ role: "user", content: promptFor(anchors) }];
 
-  // Prefer strict structured outputs; if the model/endpoint rejects that format (a fast HTTP error,
-  // e.g. 400 "response_format not supported" or a model issue), fall back to plain JSON mode, which is
-  // broadly supported on Groq. We only fall back on an HTTP-status error (fast), never on a timeout.
+  // Prefer strict structured outputs; if the model/endpoint rejects that FORMAT (400/422 — e.g.
+  // "response_format not supported" on a model that lacks it), fall back to plain JSON mode, which is
+  // broadly supported. Only format errors warrant the retry: a 413 (too large) or 5xx won't be helped by
+  // re-sending the same-size request and would just burn the per-minute token budget.
   let mode: "schema" | "object" = "schema";
   let res = await callGroq(messages, mode);
-  if (res.kind === "error" && res.status !== undefined) {
-    console.warn(`[itinerary] groq schema mode failed (${res.message}); retrying in json_object mode`);
+  if (res.kind === "error" && (res.status === 400 || res.status === 422)) {
+    console.warn(`[itinerary] groq schema mode rejected (${res.message}); retrying in json_object mode`);
     mode = "object";
     res = await callGroq(messages, mode);
   }
