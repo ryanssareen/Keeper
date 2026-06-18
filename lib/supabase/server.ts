@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import type { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
@@ -26,6 +27,27 @@ export async function createClient(): Promise<SupabaseClient> {
         } catch {
           // Called from a Server Component — ignore; the proxy owns the refresh write.
         }
+      },
+    },
+  });
+}
+
+/**
+ * Server client whose cookie WRITES land on a caller-provided response. Route Handlers that establish a
+ * session (verifyOtp / exchangeCodeForSession) and then return their OWN `NextResponse.redirect` need
+ * this: cookies written via `next/headers` do NOT ride a custom returned response, so the freshly-minted
+ * session would be dropped and the user would land back on /login despite a valid confirmation. Binding
+ * setAll to the response (the canonical Supabase pattern) guarantees the Set-Cookie headers survive.
+ */
+export async function createClientOnResponse(response: NextResponse): Promise<SupabaseClient> {
+  const cookieStore = await cookies();
+  return createServerClient(supabaseUrl(), supabaseAnonKey(), {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        for (const { name, value, options } of cookiesToSet) response.cookies.set(name, value, options);
       },
     },
   });
