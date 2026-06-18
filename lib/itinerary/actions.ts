@@ -93,7 +93,15 @@ export async function generateItinerary(prefs?: ItineraryPrefs): Promise<Itinera
   const gen = await generateCandidates(anchors);
   if (gen.kind === "rate_limited") return { ok: false, error: "Generation is busy right now — try again shortly." };
   if (gen.kind !== "ok") {
-    console.error(`[itinerary] generation failed ${JSON.stringify({ provider, city: anchors.city, days: anchors.days.length })}`);
+    console.error(
+      `[itinerary] generation failed ${JSON.stringify({
+        provider,
+        city: anchors.city,
+        days: anchors.days.length,
+        kind: gen.kind,
+        message: gen.kind === "error" ? gen.message : undefined,
+      })}`,
+    );
     return { ok: false, error: "Couldn’t generate an itinerary — please try again." };
   }
 
