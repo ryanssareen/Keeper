@@ -111,17 +111,33 @@ export function promptFor(a: GenerationAnchors): string {
   if (p?.fixed?.trim()) lines.push(`The traveler has FIXED commitments at set times: ${p.fixed.trim()}. Schedule the day's other places around these and do not propose anything that clashes with them.`);
 
   lines.push(
-    `For each place give: "name" (English/display name), "localName" (the place's name in the local language exactly as it would appear on a map, for geocoding), and "kind".`,
+    `For each place give: "name" (English/display name), "localName" (the place's name in the local language exactly as it would appear on a map, for geocoding), and "kind" (one of: sight, food, activity, transport, other).`,
     `Return ${a.days.length} day objects keyed to the dates above.`,
+    `Respond with ONLY a JSON object of the form {"days":[{"date":"YYYY-MM-DD","places":[{"name":"...","localName":"...","kind":"sight"}]}]} and nothing else.`,
   );
   return lines.join(" ");
 }
 
-async function callGroq(messages: { role: string; content: string }[]): Promise<
-  { kind: "ok"; content: string } | { kind: "rate_limited" } | { kind: "error"; message: string }
-> {
+const MAX_TOKENS = 8000; // headroom so a multi-day / "packed" plan isn't truncated into invalid JSON
+
+type GroqResult =
+  | { kind: "ok"; content: string }
+  | { kind: "rate_limited" }
+  | { kind: "error"; message: string; status?: number };
+
+/**
+ * One Groq chat call. `mode` selects the response_format: "schema" uses strict structured outputs
+ * (best adherence, but only some Groq models support it), "object" uses plain JSON mode (broadly
+ * supported) and leans on the prompt + zod validation for shape. On an HTTP error we capture the
+ * status AND the body text so the caller can both diagnose and decide whether to retry in object mode.
+ */
+async function callGroq(messages: { role: string; content: string }[], mode: "schema" | "object"): Promise<GroqResult> {
   const key = process.env.GROQ_API_KEY;
   if (!key) return { kind: "error", message: "GROQ_API_KEY not set" };
+  const responseFormat =
+    mode === "schema"
+      ? { type: "json_schema", json_schema: { name: "itinerary", strict: true, schema: JSON_SCHEMA } }
+      : { type: "json_object" };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -133,17 +149,22 @@ async function callGroq(messages: { role: string; content: string }[]): Promise<
         model: MODEL,
         messages,
         temperature: 0.4,
-        response_format: { type: "json_schema", json_schema: { name: "itinerary", strict: true, schema: JSON_SCHEMA } },
+        max_tokens: MAX_TOKENS,
+        response_format: responseFormat,
       }),
     });
     if (res.status === 429) return { kind: "rate_limited" };
-    if (!res.ok) return { kind: "error", message: `groq ${res.status}` };
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(`[itinerary] groq ${res.status} (${mode}) ${body.slice(0, 300)}`);
+      return { kind: "error", message: `groq ${res.status}: ${body.slice(0, 200)}`, status: res.status };
+    }
     const json = await res.json();
     const content = json?.choices?.[0]?.message?.content;
     if (typeof content !== "string") return { kind: "error", message: "groq: no content" };
     return { kind: "ok", content };
   } catch (e) {
-    return { kind: "error", message: e instanceof Error ? e.message : "groq fetch failed" };
+    return { kind: "error", message: e instanceof Error ? `${e.name}: ${e.message}` : "groq fetch failed" };
   } finally {
     clearTimeout(timer);
   }
@@ -171,20 +192,30 @@ export async function generateCandidates(anchors: GenerationAnchors): Promise<Ad
   if (resolveLlmProvider() === "stub") return ok(stubPlan(anchors));
 
   const messages = [{ role: "user", content: promptFor(anchors) }];
-  let res = await callGroq(messages);
+
+  // Prefer strict structured outputs; if the model/endpoint rejects that format (a fast HTTP error,
+  // e.g. 400 "response_format not supported" or a model issue), fall back to plain JSON mode, which is
+  // broadly supported on Groq. We only fall back on an HTTP-status error (fast), never on a timeout.
+  let mode: "schema" | "object" = "schema";
+  let res = await callGroq(messages, mode);
+  if (res.kind === "error" && res.status !== undefined) {
+    console.warn(`[itinerary] groq schema mode failed (${res.message}); retrying in json_object mode`);
+    mode = "object";
+    res = await callGroq(messages, mode);
+  }
   if (res.kind === "rate_limited") return rateLimited();
   if (res.kind === "error") return adapterError(res.message);
 
   let plan = safeParseJson(res.content);
   let valid = plan ? validateCandidatePlan(plan) : null;
   if (!valid) {
-    // One repair turn — feed the failure back and ask for corrected JSON.
+    // One repair turn — feed the failure back and ask for corrected JSON (same mode as the call above).
     const repair = [
       ...messages,
       { role: "assistant", content: res.content },
-      { role: "user", content: "That JSON did not match the required schema. Return ONLY corrected JSON matching the schema exactly." },
+      { role: "user", content: "That JSON did not match the required shape. Return ONLY corrected JSON matching the shape exactly." },
     ];
-    res = await callGroq(repair);
+    res = await callGroq(repair, mode);
     if (res.kind === "rate_limited") return rateLimited();
     if (res.kind === "error") return adapterError(res.message);
     plan = safeParseJson(res.content);
