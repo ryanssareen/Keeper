@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "./Logo";
+import { SiteNavMobile } from "./SiteNavMobile";
 
 type NavKey = "features" | "how" | "contact";
 
@@ -28,6 +29,7 @@ export function SiteNav({ active }: { active?: NavKey }): React.ReactElement {
             Start watching
           </Link>
         </div>
+        <SiteNavMobile />
       </div>
     </header>
   );

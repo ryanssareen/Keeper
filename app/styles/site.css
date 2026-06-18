@@ -28,6 +28,24 @@
 .nav-links a:hover, .nav-links a.active { background: var(--bg-sunken); color: var(--text-strong); }
 .nav-cta { display: flex; align-items: center; gap: 8px; }
 
+/* ---------- mobile nav (shown below the desktop breakpoint) ---------- */
+.nav-mobile { display: none; position: relative; }
+.nav-burger {
+  display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px;
+  background: none; border: 1px solid transparent; color: var(--text-strong); cursor: pointer;
+}
+.nav-burger:hover { background: var(--bg-sunken); }
+.nav-scrim { position: fixed; inset: 0; z-index: 45; background: transparent; border: 0; cursor: default; }
+.nav-panel {
+  position: absolute; top: calc(100% + 10px); right: 0; z-index: 50; min-width: 220px;
+  background: #fff; border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-lg); padding: 8px;
+  display: grid; gap: 2px;
+}
+.nav-panel > a { padding: 11px 12px; border-radius: 9px; font-size: 15px; color: var(--text-body); }
+.nav-panel > a:hover { background: var(--bg-sunken); color: var(--text-strong); }
+.nav-panel-cta { display: grid; gap: 8px; padding: 10px 4px 4px; margin-top: 6px; border-top: 1px solid var(--hairline); }
+.nav-panel-cta .btn { width: 100%; }
+
 /* ---------- full footer (landing) ---------- */
 footer.site { border-top: 1px solid var(--border); padding: 56px 0 40px; }
 .foot-grid { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 32px; }
@@ -53,6 +71,12 @@ footer.site-compact { border-top: 1px solid var(--border); padding: 40px 0; }
 .foot-links a:hover { color: var(--text-strong); }
 
 @media (max-width: 900px) {
-  .nav-links { display: none; }
+  .nav-links, .nav-cta { display: none; }
+  .nav-mobile { display: flex; }
   .foot-grid { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 560px) {
+  .foot-grid { grid-template-columns: 1fr; gap: 24px; }
+  .foot-bottom { flex-direction: column; gap: 10px; align-items: flex-start; }
 }

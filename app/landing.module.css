@@ -111,3 +111,16 @@
   .cascade, .steps, .features { grid-template-columns: 1fr 1fr; }
   .cascArrow { display: none; }
 }
+
+@media (max-width: 560px) {
+  .hero { padding: 48px 0 44px; }
+  .heroSub { font-size: 17px; max-width: none; }
+  .heroActions { flex-direction: column; align-items: stretch; }
+  .heroActions .btn { width: 100%; }
+  .block { padding: 56px 0; }
+  .cascade, .steps, .features { grid-template-columns: 1fr; }
+  .quoteBlock { padding: 40px 26px; }
+  .quoteBlock blockquote { max-width: none; }
+  .final { padding: 64px 0; }
+  .stripRow { gap: 24px 32px; }
+}
