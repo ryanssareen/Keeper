@@ -18,10 +18,10 @@ export default function ContactPage(): React.ReactElement {
         <div className={`k-container ${s.grid}`}>
           <div className={s.lead}>
             <span className="k-eyebrow">We’re a small team</span>
-            <h1>Tell us about your trip — or what broke.</h1>
+            <h1>Tell us about your trip.</h1>
             <p>
-              Whether you’re stuck mid-cascade, evaluating Keeper for your travel, or have a question
-              about how the engine works, a human reads every message.
+              Whether you’re planning something big, evaluating Keeper for your travel, or have a
+              question about how it works, a human reads every message.
             </p>
 
             <div className={s.channels}>

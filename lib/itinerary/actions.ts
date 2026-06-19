@@ -168,7 +168,7 @@ export async function generateItinerary(prefs?: ItineraryPrefs): Promise<Itinera
     return { ok: false, error: "Couldn’t save the itinerary — please try again." };
   }
   {
-    const rows = items.map((i) => ({
+    const baseRows = items.map((i) => ({
       user_id: user.id,
       day: i.day,
       start_ts: i.startTs,
@@ -181,7 +181,13 @@ export async function generateItinerary(prefs?: ItineraryPrefs): Promise<Itinera
       kind: i.kind,
       status: "planned",
     }));
-    const { error: insErr } = await supabase.from("itinerary_items").insert(rows);
+    const rows = items.map((i, idx) => ({ ...baseRows[idx]!, description: i.description ?? null }));
+    let { error: insErr } = await supabase.from("itinerary_items").insert(rows);
+    // Back-compat: if the `description` column hasn't been migrated yet, insert without it rather than fail.
+    if (insErr && /description/i.test(insErr.message) && /(does not exist|schema cache|column)/i.test(insErr.message)) {
+      console.warn("[itinerary] description column missing — inserting without it (run the migration to enable)");
+      ({ error: insErr } = await supabase.from("itinerary_items").insert(baseRows));
+    }
     if (insErr) {
       console.error("[itinerary] insert failed:", insErr.message);
       return { ok: false, error: "Couldn’t save the itinerary — please try again." };
