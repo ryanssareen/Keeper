@@ -74,6 +74,7 @@ export default async function ItineraryPage(): Promise<React.ReactElement> {
           dest={trip.dest ?? "your trip"}
           initialPrefs={trip.itineraryPrefs}
           party={trip.party}
+          descriptions={trip.itineraryDescriptions}
         />
       )}
     </AppShell>

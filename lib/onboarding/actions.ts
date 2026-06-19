@@ -20,6 +20,9 @@ export type OnboardingAnswers = {
   hotelIn: string;
   hotelOut: string;
   itineraryPrefs?: ItineraryPrefs; // optional refinements for itinerary generation (set on the itinerary page)
+  // Per-stop one-line descriptions, keyed by place name. Stored here (a flexible JSON blob) so the feature
+  // needs no DB migration on itinerary_items — looked up by place when rendering the plan.
+  itineraryDescriptions?: Record<string, string>;
 };
 
 export type OnboardingRow = {

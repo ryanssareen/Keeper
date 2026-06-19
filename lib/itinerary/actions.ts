@@ -194,6 +194,22 @@ export async function generateItinerary(prefs?: ItineraryPrefs): Promise<Itinera
     }
   }
 
+  // Persist per-stop descriptions in the onboarding JSON (keyed by place name) so they survive a reload
+  // with NO itinerary_items migration required. (If the optional description column does exist, the rows
+  // also carry it; the render prefers the row value and falls back to this map.)
+  const descriptions: Record<string, string> = {};
+  for (const i of items) if (i.description) descriptions[i.placeName] = i.description;
+  {
+    const { error: descErr } = await supabase
+      .from("onboarding")
+      .update({
+        answers: { ...answers, itineraryPrefs: effectivePrefs, itineraryDescriptions: descriptions },
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", user.id);
+    if (descErr) console.error("[itinerary] failed to persist descriptions:", descErr.message);
+  }
+
   revalidatePath("/trips/itinerary");
   return { ok: true, count: items.length, dropped, advisories };
 }

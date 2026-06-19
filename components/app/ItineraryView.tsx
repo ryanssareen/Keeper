@@ -44,6 +44,7 @@ export function ItineraryView({
   dest,
   initialPrefs,
   party,
+  descriptions,
 }: {
   items: ItineraryItem[];
   anchors: string;
@@ -51,6 +52,7 @@ export function ItineraryView({
   dest: string;
   initialPrefs?: ItineraryPrefs;
   party?: string;
+  descriptions?: Record<string, string>;
 }): React.ReactElement {
   const router = useRouter();
   const inFlight = useRef(false);
@@ -297,7 +299,10 @@ export function ItineraryView({
         <span className={s.time}>{fmtTime(it.startTs, it.ianaZone) || "—"}</span>
         <span className={s.body}>
           <b className={s.title}>{it.title}</b>
-          {it.description ? <span className={s.desc}>{it.description}</span> : null}
+          {(() => {
+            const desc = it.description ?? descriptions?.[it.placeName];
+            return desc ? <span className={s.desc}>{desc}</span> : null;
+          })()}
           <span className={s.place}>{it.placeName}</span>
         </span>
         <span className={s.watched} title="Keeper watches this against your bookings">Watched</span>
