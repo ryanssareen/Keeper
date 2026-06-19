@@ -10,9 +10,12 @@ import type { CandidatePlan } from "@/lib/itinerary/generate";
  */
 
 const USER_AGENT = "keeper-itinerary/0.1 (+https://github.com/ryanssareen/Keeper)";
-const RATE_MS = 1100; // Nominatim policy: <= 1 req/s, sequential
-const GEOCODE_TIMEOUT_MS = 8000; // a hung Nominatim connection must not block the whole run
-const MAX_GEOCODES = 40; // cap total un-cached geocodes so worst-case wall time stays well under the function budget
+// Photon is the primary geocoder (Nominatim blocks datacenter IPs, so from the serverless function it
+// rarely resolves — see the photon_fallback logs). Photon has no hard 1-req/s rule, so a small spacer
+// keeps the run polite while staying well under the function budget for a multi-day trip.
+const RATE_MS = 250;
+const GEOCODE_TIMEOUT_MS = 7000; // a hung connection must not block the whole run
+const MAX_GEOCODES = 36; // cap total un-cached geocodes so worst-case wall time stays well under the budget
 
 const sig = (s: string): string[] =>
   s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((t) => t.length >= 4);
@@ -102,15 +105,16 @@ async function geocodePhoton(localName: string, city: string): Promise<{ lat: nu
 }
 
 // Query "<local name>, <city>" for disambiguation, but name-match on the place name only (the city token
-// would otherwise trivially match every hit in that city). Nominatim first; on a block/miss, fall back to
-// Photon — so a serverless egress block against one provider can't silently drop the whole itinerary.
+// would otherwise trivially match every hit in that city). Photon FIRST — it's the geocoder that actually
+// resolves from the serverless function (Nominatim blocks datacenter IPs); fall back to Nominatim only on
+// a Photon miss, so neither provider's outage silently drops the whole itinerary.
 async function geocodeOne(localName: string, city: string): Promise<{ lat: number; lng: number } | null> {
-  const nominatim = await geocodeNominatim(localName, city);
-  if (nominatim) return nominatim;
   const photon = await geocodePhoton(localName, city);
-  if (photon) console.info(`[itinerary.geocode] photon_fallback_hit ${JSON.stringify({ q: localName })}`);
+  if (photon) return photon;
+  const nominatim = await geocodeNominatim(localName, city);
+  if (nominatim) console.info(`[itinerary.geocode] nominatim_fallback_hit ${JSON.stringify({ q: localName })}`);
   else console.warn(`[itinerary.geocode] dropped ${JSON.stringify({ q: localName })}`);
-  return photon;
+  return nominatim;
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));

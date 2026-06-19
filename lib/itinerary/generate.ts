@@ -28,10 +28,11 @@ const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const MODEL = "openai/gpt-oss-120b"; // verify against /openai/v1/models before launch (KTD3)
 const TIMEOUT_MS = 60_000;
 
-// Per-day candidate target by pace (the user's "relaxed → packed"); default over-generates since U3 drops
-// unresolved candidates (KTD4). The booking envelope still caps how many actually fit each day.
-const PER_DAY_TARGET = 8;
-const PACE_TARGET: Record<Pace, number> = { relaxed: 5, balanced: 7, packed: 9 };
+// Per-day stop target by pace. Deliberately LOW: a good trip is a few well-chosen stops with room to
+// breathe, not a packed checklist (the reference itinerary runs ~3-4 stops on a full day). The booking
+// envelope caps the rest; geocoding drops anything that isn't a real mappable place.
+const PER_DAY_TARGET = 4;
+const PACE_TARGET: Record<Pace, number> = { relaxed: 3, balanced: 4, packed: 6 };
 const targetFor = (prefs?: ItineraryPrefs): number => (prefs?.pace ? PACE_TARGET[prefs.pace] : PER_DAY_TARGET);
 
 type Provider = "groq" | "stub";
@@ -98,9 +99,10 @@ const JSON_SCHEMA = {
 export function promptFor(a: GenerationAnchors): string {
   const target = targetFor(a.prefs);
   const lines = [
-    `Plan a booking-anchored day-by-day itinerary for ${a.party} in ${a.city}, ${a.country}.`,
+    `Plan a RELAXED, realistic day-by-day itinerary for ${a.party} in ${a.city}, ${a.country} — quality over quantity, a trip a real person would enjoy.`,
     `Days (YYYY-MM-DD): ${a.days.join(", ")}.`,
-    `For each day, propose ~${target} specific, real places (a MIX of headline sights AND the long tail — restaurants, cafes, viewpoints, markets, neighborhoods — that makes a trip good). Use real, specific names.`,
+    `Give each day only ~${target} well-chosen stops (e.g. a major sight or two plus a meal or a neighborhood to wander) — NOT a packed checklist. Leave room for travel time, meals and rest, and keep the FIRST day light for arrival.`,
+    `Every stop must be a real, fixed, mappable PLACE — a specific landmark, museum, temple, park, garden, viewpoint, market, or a named restaurant/cafe/bar. Do NOT include flights, trains, transfers, transit lines or services, tours, or generic dishes; only somewhere the traveler physically stands that shows up on a map.`,
   ];
 
   const p = a.prefs;
@@ -109,6 +111,7 @@ export function promptFor(a: GenerationAnchors): string {
   if (p?.pace) lines.push(`Pace: ${p.pace} — ${p.pace === "relaxed" ? "fewer stops, more breathing room" : p.pace === "packed" ? "fit in as much as reasonable" : "a balanced day"}.`);
   if (p?.mustSee?.trim()) lines.push(`Must include these places/areas if real and sensible: ${p.mustSee.trim()}.`);
   if (p?.fixed?.trim()) lines.push(`The traveler has FIXED commitments at set times: ${p.fixed.trim()}. Schedule the day's other places around these and do not propose anything that clashes with them.`);
+  if (p?.notes?.trim()) lines.push(`Also keep in mind (dietary needs, mobility, budget, vibe, errands, anything else): ${p.notes.trim()}.`);
 
   lines.push(
     `For each place give: "name" (English/display name), "localName" (the place's name in the local language exactly as it would appear on a map, for geocoding), and "kind" (one of: sight, food, activity, transport, other).`,

@@ -12,7 +12,7 @@ describe("promptFor — weaves optional refinements into the prompt", () => {
   it("falls back to a generic prompt when no prefs are given", () => {
     const p = promptFor(base);
     expect(p).toContain("Tokyo, Japan");
-    expect(p).toContain("~8 specific"); // default target
+    expect(p).toContain("~4 well-chosen"); // default target (relaxed pacing)
     expect(p).not.toContain("Travelers:");
     expect(p).not.toContain("FIXED commitments");
   });
@@ -34,8 +34,8 @@ describe("promptFor — weaves optional refinements into the prompt", () => {
   });
 
   it("lets pace tune the per-day target", () => {
-    expect(promptFor({ ...base, prefs: { pace: "relaxed" } })).toContain("~5 specific");
-    expect(promptFor({ ...base, prefs: { pace: "packed" } })).toContain("~9 specific");
+    expect(promptFor({ ...base, prefs: { pace: "relaxed" } })).toContain("~3 well-chosen");
+    expect(promptFor({ ...base, prefs: { pace: "packed" } })).toContain("~6 well-chosen");
     expect(promptFor({ ...base, prefs: { pace: "relaxed" } })).toContain("Pace: relaxed");
   });
 });
