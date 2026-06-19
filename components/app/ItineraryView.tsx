@@ -21,6 +21,20 @@ const fmtTime = (iso: string | null, zone: string): string =>
 const fmtDay = (day: string): string =>
   new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${day}T00:00:00Z`));
 
+// Split a day into parts so it reads as a plan, not a flat checklist. Bucket by the scheduled local hour.
+const PART_ORDER = ["Morning", "Afternoon", "Evening"] as const;
+type DayPart = (typeof PART_ORDER)[number];
+const partOfDay = (iso: string | null, zone: string): DayPart => {
+  if (!iso) return "Morning";
+  const h = Number(new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hour12: false, timeZone: zone }).format(new Date(iso)));
+  return h < 12 ? "Morning" : h < 17 ? "Afternoon" : "Evening";
+};
+function groupParts(items: ItineraryItem[]): { label: DayPart; items: ItineraryItem[] }[] {
+  const buckets: Record<DayPart, ItineraryItem[]> = { Morning: [], Afternoon: [], Evening: [] };
+  for (const it of items) buckets[partOfDay(it.startTs, it.ianaZone)].push(it);
+  return PART_ORDER.map((label) => ({ label, items: buckets[label] })).filter((b) => b.items.length > 0);
+}
+
 type GenSummary = { count: number; dropped: number; advisories: Advisory[] } | null;
 
 export function ItineraryView({
@@ -212,6 +226,14 @@ export function ItineraryView({
                 value={prefs.fixed ?? ""} onChange={(e) => patchPrefs({ fixed: e.target.value })}
               />
             </div>
+
+            <div className={s.refineField}>
+              <label htmlFor="prefNotes">Notes <span className={s.refineHint}>anything else — dietary, mobility, budget, vibe, errands…</span></label>
+              <textarea
+                id="prefNotes" className="field" rows={2} placeholder="e.g. vegetarian, no early mornings, mid-range budget, want one onsen day"
+                value={prefs.notes ?? ""} onChange={(e) => patchPrefs({ notes: e.target.value })}
+              />
+            </div>
           </div>
         ) : null}
       </div>
@@ -247,37 +269,42 @@ export function ItineraryView({
         days.map(([day, dayItems]) => (
           <section key={day} className={s.day}>
             <h2 className={s.dayHead}>{fmtDay(day)}</h2>
-            <ul className={s.items}>
-              {dayItems.map((it) => {
-                const done = statusOf(it) === "completed";
-                return (
-                <li key={it.id} className={`${s.item} ${done ? s.done : ""}`}>
-                  <button
-                    type="button"
-                    className={s.check}
-                    onClick={() => onToggle(it)}
-                    disabled={pendingId === it.id}
-                    aria-label={done ? `Mark ${it.title} not done` : `Mark ${it.title} done`}
-                  >
-                    {done ? "✓" : ""}
-                  </button>
-                  <span className={s.time}>{fmtTime(it.startTs, it.ianaZone) || "—"}</span>
-                  <span className={s.body}>
-                    <b className={s.title}>{it.title}</b>
-                    <span className={s.place}>{it.placeName}</span>
-                  </span>
-                  <span className={s.watched} title="Keeper watches this against your bookings">Watched</span>
-                  <button type="button" className={s.remove} onClick={() => onRemove(it.id)} disabled={pendingId === it.id} aria-label={`Remove ${it.title}`}>
-                    Remove
-                  </button>
-                </li>
-                );
-              })}
-            </ul>
+            {groupParts(dayItems).map(({ label, items: partItems }) => (
+              <div key={label} className={s.part}>
+                <h3 className={s.partHead}>{label}</h3>
+                <ul className={s.items}>{partItems.map(renderItem)}</ul>
+              </div>
+            ))}
           </section>
         ))
       )}
     </div>
   );
+
+  function renderItem(it: ItineraryItem): React.ReactElement {
+    const done = statusOf(it) === "completed";
+    return (
+      <li key={it.id} className={`${s.item} ${done ? s.done : ""}`}>
+        <button
+          type="button"
+          className={s.check}
+          onClick={() => onToggle(it)}
+          disabled={pendingId === it.id}
+          aria-label={done ? `Mark ${it.title} not done` : `Mark ${it.title} done`}
+        >
+          {done ? "✓" : ""}
+        </button>
+        <span className={s.time}>{fmtTime(it.startTs, it.ianaZone) || "—"}</span>
+        <span className={s.body}>
+          <b className={s.title}>{it.title}</b>
+          <span className={s.place}>{it.placeName}</span>
+        </span>
+        <span className={s.watched} title="Keeper watches this against your bookings">Watched</span>
+        <button type="button" className={s.remove} onClick={() => onRemove(it.id)} disabled={pendingId === it.id} aria-label={`Remove ${it.title}`}>
+          Remove
+        </button>
+      </li>
+    );
+  }
 }
 

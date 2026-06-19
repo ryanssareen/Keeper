@@ -112,13 +112,22 @@ export async function generateItinerary(prefs?: ItineraryPrefs): Promise<Itinera
     console.warn(`[itinerary] using STUB generator (GROQ_API_KEY unset) — places will likely fail geocoding`);
   }
 
-  const { items, dropped, dropResolve, dropEnvelope, advisories } = await assembleItinerary(gen.data, {
-    city: answers.dest,
-    startDate: dates.startDate,
-    endDate: dates.endDate,
-    arrivalInstant,
-    assumed: dates.assumed,
-  });
+  // Defensive: geocoding/scheduling does network + date math; a thrown error here would otherwise reject
+  // the whole server action (the client shows a generic "Something went wrong"). Catch it and degrade.
+  let assembled;
+  try {
+    assembled = await assembleItinerary(gen.data, {
+      city: answers.dest,
+      startDate: dates.startDate,
+      endDate: dates.endDate,
+      arrivalInstant,
+      assumed: dates.assumed,
+    });
+  } catch (e) {
+    console.error(`[itinerary] assemble threw: ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}`);
+    return { ok: false, error: "Couldn’t build your itinerary just now — please try again." };
+  }
+  const { items, dropped, dropResolve, dropEnvelope, advisories } = assembled;
 
   console.info(
     `[itinerary] run ${JSON.stringify({

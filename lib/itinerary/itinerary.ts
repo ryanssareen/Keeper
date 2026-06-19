@@ -43,12 +43,15 @@ export type ItineraryPrefs = {
   pace?: Pace;
   mustSee?: string; // specific places / neighborhoods to include
   fixed?: string; // reservations or tickets at set times, e.g. "dinner 8pm Jul 2"
+  notes?: string; // anything else — dietary needs, mobility, budget, vibe, errands, etc.
 };
 
 /** True when at least one refinement field is filled (drives "should we show this as set" UI). */
 export function hasPrefs(p?: ItineraryPrefs | null): boolean {
   if (!p) return false;
-  return Boolean(p.ages?.trim() || (p.interests && p.interests.length) || p.pace || p.mustSee?.trim() || p.fixed?.trim());
+  return Boolean(
+    p.ages?.trim() || (p.interests && p.interests.length) || p.pace || p.mustSee?.trim() || p.fixed?.trim() || p.notes?.trim(),
+  );
 }
 
 /**

@@ -61,8 +61,10 @@
 .empty { margin-top: 20px; font-size: 14px; color: var(--text-muted); border: 1px dashed var(--border-strong); border-radius: 16px; padding: 24px; line-height: 1.55; }
 
 /* days + items */
-.day { margin-top: 26px; }
-.dayHead { font-size: 13px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-faint); margin-bottom: 10px; }
+.day { margin-top: 30px; }
+.dayHead { font-size: 16px; letter-spacing: -0.01em; color: var(--text-strong); font-weight: 600; margin-bottom: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--hairline); }
+.part { margin-top: 16px; }
+.partHead { font-size: 11px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-faint); margin-bottom: 8px; }
 .items { display: grid; gap: 8px; }
 .item {
   display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #fff;
