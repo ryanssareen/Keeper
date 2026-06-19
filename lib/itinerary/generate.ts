@@ -13,7 +13,7 @@ import { ITEM_KINDS, type ItemKind, type ItineraryPrefs, type Pace } from "@/lib
  * an AdapterResult return so callers branch instead of throwing, and a keyless fallback for tests.
  */
 
-export type CandidatePlace = { name: string; localName: string; kind: ItemKind };
+export type CandidatePlace = { name: string; localName: string; kind: ItemKind; description?: string };
 export type CandidateDay = { date: string; places: CandidatePlace[] };
 export type CandidatePlan = { days: CandidateDay[] };
 export type GenerationAnchors = {
@@ -49,6 +49,8 @@ const candidatePlanSchema = z.object({
           name: z.string().min(1).max(200),
           localName: z.string().min(1).max(200),
           kind: z.enum(ITEM_KINDS),
+          // Optional in validation (json_object mode may omit it) but required by the strict schema below.
+          description: z.string().max(300).optional(),
         }),
       ),
     }),
@@ -79,11 +81,12 @@ const JSON_SCHEMA = {
             items: {
               type: "object",
               additionalProperties: false,
-              required: ["name", "localName", "kind"],
+              required: ["name", "localName", "kind", "description"],
               properties: {
                 name: { type: "string" },
                 localName: { type: "string" },
                 kind: { type: "string", enum: [...ITEM_KINDS] },
+                description: { type: "string" },
               },
             },
           },
@@ -114,9 +117,9 @@ export function promptFor(a: GenerationAnchors): string {
   if (p?.notes?.trim()) lines.push(`Also keep in mind (dietary needs, mobility, budget, vibe, errands, anything else): ${p.notes.trim()}.`);
 
   lines.push(
-    `For each place give: "name" (English/display name), "localName" (the place's name in the local language exactly as it would appear on a map, for geocoding), and "kind" (one of: sight, food, activity, transport, other).`,
+    `For each place give: "name" (English/display name), "localName" (the place's name in the local language exactly as it would appear on a map, for geocoding), "kind" (one of: sight, food, activity, transport, other), and "description" (ONE short sentence — what it is or why go, max ~15 words, e.g. "Tokyo's oldest temple — go early to beat the crowds").`,
     `Return ${a.days.length} day objects keyed to the dates above.`,
-    `Respond with ONLY a JSON object of the form {"days":[{"date":"YYYY-MM-DD","places":[{"name":"...","localName":"...","kind":"sight"}]}]} and nothing else.`,
+    `Respond with ONLY a JSON object of the form {"days":[{"date":"YYYY-MM-DD","places":[{"name":"...","localName":"...","kind":"sight","description":"..."}]}]} and nothing else.`,
   );
   return lines.join(" ");
 }

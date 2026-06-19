@@ -31,6 +31,11 @@
 .mockWhen { margin-top: 6px; font-size: 13px; color: var(--text-muted); }
 .mockWhen b { color: var(--text-body); font-weight: 600; }
 
+.planList { margin-top: 16px; display: grid; gap: 1px; background: var(--hairline); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.planRow { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #fff; padding: 11px 14px; }
+.planRow span { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); }
+.planRow b { font-size: 13.5px; font-weight: 600; color: var(--text-strong); }
+
 .alert { margin-top: 18px; border: 1px solid var(--risk-border); background: var(--risk-surface); border-radius: 16px; padding: 16px; }
 .alertHead { display: flex; align-items: center; gap: 8px; }
 .alert h4 { font-size: 15px; color: var(--amber-900); margin-top: 12px; letter-spacing: -0.01em; }

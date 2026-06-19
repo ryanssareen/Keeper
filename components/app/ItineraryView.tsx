@@ -297,6 +297,7 @@ export function ItineraryView({
         <span className={s.time}>{fmtTime(it.startTs, it.ianaZone) || "—"}</span>
         <span className={s.body}>
           <b className={s.title}>{it.title}</b>
+          {it.description ? <span className={s.desc}>{it.description}</span> : null}
           <span className={s.place}>{it.placeName}</span>
         </span>
         <span className={s.watched} title="Keeper watches this against your bookings">Watched</span>

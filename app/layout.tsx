@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Keeper",
-  description: "Watch a flight against one commitment and catch the cascade before you do.",
+  description: "Your whole trip in one calm place — plan your days, keep every booking and document together, and stay ahead of your flight.",
   // Links <link rel="manifest" href="/manifest.webmanifest"> so the app is installable (the iOS
   // standalone-PWA path web push requires). appleWebApp emits the apple-mobile-web-app meta tags.
   manifest: "/manifest.webmanifest",

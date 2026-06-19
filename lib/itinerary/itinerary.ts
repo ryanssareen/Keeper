@@ -62,6 +62,7 @@ export function hasPrefs(p?: ItineraryPrefs | null): boolean {
 export const monitorableItemSchema = z.object({
   title: z.string().min(1).max(200),
   placeName: z.string().min(1).max(300),
+  description: z.string().max(300).optional(), // one-line "why / what it is" (optional, LLM-sourced)
   lat: z.number(),
   lng: z.number(),
   ianaZone: z.string().min(1),

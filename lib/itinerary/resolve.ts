@@ -182,6 +182,7 @@ export async function resolveCandidates(
       const candidate = {
         title: place.name,
         placeName: place.localName,
+        description: place.description?.trim() || undefined,
         lat: hit.lat,
         lng: hit.lng,
         ianaZone: zone,

@@ -10,7 +10,7 @@ export function SiteFooter(): React.ReactElement {
           <div className="foot-brand">
             <Logo />
             <p>
-              It catches your trip falling apart before you do — and tells you what to do about it.
+              Your whole trip in one calm place — the plan, the bookings, and the documents.
             </p>
           </div>
           <div className="foot-col">
@@ -31,7 +31,7 @@ export function SiteFooter(): React.ReactElement {
           </div>
         </div>
         <div className="foot-bottom">
-          <p>© 2026 Keeper. Detect and advise — never auto-fix.</p>
+          <p>© 2026 Keeper. Your trip, in one calm place.</p>
           <p className="mono">v1 · walking skeleton</p>
         </div>
       </div>
