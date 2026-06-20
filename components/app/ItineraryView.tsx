@@ -60,9 +60,13 @@ export function ItineraryView({
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<GenSummary>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
-  // Optional refinements (the "rough idea" path). Empty == plan from destination + dates only.
+  // Refinements are now REQUIRED before generating: who's going (ages), at least one interest, and pace.
+  // The free-text fields (must-sees / fixed / notes) stay optional. Prefill from saved prefs.
   const [prefs, setPrefs] = useState<ItineraryPrefs>(initialPrefs ?? {});
-  const [showRefine, setShowRefine] = useState(hasPrefs(initialPrefs));
+  const [customInterest, setCustomInterest] = useState("");
+  const requiredOk = Boolean(prefs.ages?.trim() && (prefs.interests?.length ?? 0) > 0 && prefs.pace);
+  // Open the panel by default until the required answers are in (or there are already saved prefs).
+  const [showRefine, setShowRefine] = useState(!requiredOk || hasPrefs(initialPrefs));
   const patchPrefs = (p: Partial<ItineraryPrefs>): void => setPrefs((prev) => ({ ...prev, ...p }));
   const toggleInterest = (label: string): void =>
     setPrefs((prev) => {
@@ -71,6 +75,16 @@ export function ItineraryView({
       else set.add(label);
       return { ...prev, interests: [...set] };
     });
+  const addCustomInterest = (): void => {
+    const v = customInterest.trim();
+    if (!v) return;
+    setPrefs((prev) => {
+      const set = new Set(prev.interests ?? []);
+      set.add(v);
+      return { ...prev, interests: [...set] };
+    });
+    setCustomInterest("");
+  };
   // Optimistic status overlay: the tick must reflect the click instantly and hold, independent of when
   // the server refetch lands — otherwise a refresh/RSC-cache race re-renders the stale status and the
   // tick flashes on then off (issue #7). The overlay stays in sync with the server (it only ever holds
@@ -169,15 +183,15 @@ export function ItineraryView({
 
       <div className={s.refine}>
         <button type="button" className={s.refineToggle} onClick={() => setShowRefine((v) => !v)} aria-expanded={showRefine}>
-          <span>Refine your plan <em>· optional</em></span>
+          <span>Refine your plan <em>· a few quick answers</em></span>
           <span className={s.chev} data-open={showRefine}>⌄</span>
         </button>
         {showRefine ? (
           <div className={s.refineBody}>
-            <p className={s.refineLede}>Add as much or as little as you like — or just hit {items.length > 0 ? "Regenerate" : "Plan my trip"} to plan from your destination and dates.</p>
+            <p className={s.refineLede}>Tell us who&apos;s going, what you&apos;re into, and your pace — we&apos;ll build the plan around it. The rest is optional.</p>
 
             <div className={s.refineField}>
-              <label htmlFor="prefAges">Who’s going? <span className={s.refineHint}>{party ? `you said: ${party}` : "ages help us tailor picks"}</span></label>
+              <label htmlFor="prefAges">Who’s going? <span className={s.reqStar}>*</span> <span className={s.refineHint}>{party ? `you said: ${party}` : "ages help us tailor picks"}</span></label>
               <input
                 id="prefAges" className="field" type="text" placeholder="e.g. 2 adults, 1 child age 7"
                 value={prefs.ages ?? ""} onChange={(e) => patchPrefs({ ages: e.target.value })}
@@ -185,7 +199,7 @@ export function ItineraryView({
             </div>
 
             <div className={s.refineField}>
-              <span className={s.refineLabel}>Interests</span>
+              <span className={s.refineLabel}>Interests <span className={s.reqStar}>*</span></span>
               <div className={s.chips}>
                 {INTEREST_OPTIONS.map((label) => {
                   const on = (prefs.interests ?? []).includes(label);
@@ -195,11 +209,27 @@ export function ItineraryView({
                     </button>
                   );
                 })}
+                {(prefs.interests ?? [])
+                  .filter((i) => !(INTEREST_OPTIONS as readonly string[]).includes(i))
+                  .map((label) => (
+                    <button key={label} type="button" className={`${s.chip} ${s.chipOn}`} aria-pressed onClick={() => toggleInterest(label)} title="Remove">
+                      {label} ✕
+                    </button>
+                  ))}
+              </div>
+              <div className={s.addRow}>
+                <input
+                  className="field" type="text" placeholder="Add your own (e.g. street food, jazz bars)"
+                  value={customInterest}
+                  onChange={(e) => setCustomInterest(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustomInterest(); } }}
+                />
+                <button type="button" className="btn btn-secondary" onClick={addCustomInterest} disabled={!customInterest.trim()}>Add</button>
               </div>
             </div>
 
             <div className={s.refineField}>
-              <span className={s.refineLabel}>Pace</span>
+              <span className={s.refineLabel}>Pace <span className={s.reqStar}>*</span></span>
               <div className={s.segmented}>
                 {PACE_OPTIONS.map((p) => (
                   <button
@@ -241,9 +271,14 @@ export function ItineraryView({
       </div>
 
       <div className={s.actions}>
-        <button type="button" className="btn btn-primary" onClick={onGenerate} disabled={busy} aria-busy={busy}>
+        <button
+          type="button" className="btn btn-primary"
+          onClick={() => { if (!requiredOk) { setShowRefine(true); return; } onGenerate(); }}
+          disabled={busy || !requiredOk} aria-busy={busy}
+        >
           {busy ? "Planning your days…" : items.length > 0 ? "Regenerate" : "Plan my trip"}
         </button>
+        {!requiredOk ? <span className={s.reqNote}>Answer who&apos;s going, interests, and pace to build your plan.</span> : null}
       </div>
 
       {error ? <p className={s.error} role="alert">{error}</p> : null}
