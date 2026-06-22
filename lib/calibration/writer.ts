@@ -210,6 +210,28 @@ export async function recordSelfReport(
     WHERE watch_id = ${watchId} AND self_report_status IN ('pending', 'expired')`;
 }
 
+/**
+ * Set the OWNER'S in-app "was this useful?" answer on the calibration row — the real signal behind
+ * the cascadeAlertUsefulness metric, captured when a logged-in owner reacts in the Alerts feed.
+ * Distinct from recordSelfReport's `was_useful`, which arrives bundled with the made/missed outcome;
+ * this writes `was_useful` ALONE, which is safe because it isn't bound by the answered<->outcome CHECK
+ * (only `outcome` is). FIRST-write-wins semantics aren't imposed — a toggle re-affirms the latest
+ * answer. Does NOT create a row: if no calibration row exists (watch armed before enrichment), the
+ * UPDATE matches nothing and we report updated:false rather than fabricating an outcome shell.
+ */
+export async function setOwnerUsefulness(
+  watchId: string,
+  wasUseful: boolean,
+): Promise<{ updated: boolean }> {
+  const sql = db();
+  const rows = await sql`
+    UPDATE calibration
+    SET was_useful = ${wasUseful}
+    WHERE watch_id = ${watchId}
+    RETURNING watch_id`;
+  return { updated: rows.length > 0 };
+}
+
 /** Frozen-contract conformance: a single object implementing the CalibrationWriter surface. */
 export const calibrationWriter: CalibrationWriter = {
   appendSnapshot,

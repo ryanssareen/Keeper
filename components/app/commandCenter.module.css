@@ -1,0 +1,123 @@
+/* Command-center shell — the post-auth sidebar frame (Today / Itinerary / Bookings /
+ * Alerts / Checklist / Settings). Ported from the Claude Design desktop prototype, but
+ * driven entirely by the app's CSS-variable tokens so it adapts to dark mode + accent. */
+
+.app { display: flex; min-height: 100dvh; background: var(--bg); }
+
+/* ===================== SIDEBAR ===================== */
+.side {
+  width: 252px; flex: none; background: var(--bg-subtle);
+  border-right: 1px solid var(--hairline);
+  display: flex; flex-direction: column; padding: 20px 14px;
+  position: sticky; top: 0; height: 100dvh;
+}
+.brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 18px; }
+.brandTile {
+  width: 30px; height: 30px; border-radius: 9px; background: var(--surface-ink);
+  display: grid; place-items: center; flex: none;
+}
+.brand b { font-size: 16px; font-weight: 600; letter-spacing: -0.02em; color: var(--text-strong); }
+
+.tripswitch {
+  display: flex; align-items: center; gap: 11px; padding: 11px;
+  border: 1px solid var(--border); border-radius: 14px; background: var(--surface-card);
+  cursor: default; box-shadow: var(--shadow-xs); text-align: left; width: 100%;
+}
+.tripswitch .tx {
+  width: 34px; height: 34px; border-radius: 10px; flex: none;
+  background-image: repeating-linear-gradient(135deg, var(--zinc-300), var(--zinc-300) 6px, var(--zinc-200) 6px, var(--zinc-200) 12px);
+}
+[data-theme="dark"] .tripswitch .tx {
+  background-image: repeating-linear-gradient(135deg, #2a2a2e, #2a2a2e 6px, #1c1c1f 6px, #1c1c1f 12px);
+}
+.tripswitch .tn { flex: 1; min-width: 0; }
+.tripswitch .tn .k { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-faint); }
+.tripswitch .tn b { display: block; font-size: 14px; font-weight: 600; color: var(--text-strong); letter-spacing: -0.01em; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.nav { display: flex; flex-direction: column; gap: 2px; margin-top: 18px; overflow-y: auto; }
+.nav::-webkit-scrollbar { display: none; }
+.ni {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 11px;
+  color: var(--text-muted); font-size: 14px; font-weight: 500; letter-spacing: -0.01em;
+  transition: background var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast);
+  border: 1px solid transparent; user-select: none;
+}
+.ni:hover { background: var(--bg-sunken); color: var(--text-body); }
+.ni.on { background: var(--surface-card); color: var(--text-strong); box-shadow: var(--shadow-xs); border-color: var(--border); }
+.ni svg { flex: none; }
+.ni .ct {
+  margin-left: auto; font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+  background: var(--miss-surface); color: var(--miss-ink); padding: 2px 7px; border-radius: 999px;
+}
+.sep { height: 1px; background: var(--hairline); margin: 12px 8px; }
+.gl { font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-faint); padding: 4px 12px 8px; }
+
+.userbox {
+  margin-top: auto; display: flex; align-items: center; gap: 11px; padding: 10px;
+  border-radius: 13px; border: 1px solid var(--hairline); cursor: pointer;
+  transition: background var(--dur-fast); text-decoration: none;
+}
+.userbox:hover { background: var(--bg-sunken); }
+.userbox .ava {
+  width: 34px; height: 34px; border-radius: 50%; background: var(--surface-ink); color: var(--bg);
+  display: grid; place-items: center; font-size: 13px; font-weight: 600; flex: none;
+}
+.userbox .un { flex: 1; min-width: 0; }
+.userbox .un b { display: block; font-size: 13px; font-weight: 600; color: var(--text-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.userbox .un span { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.signout { color: var(--text-faint); padding: 4px; border-radius: 8px; display: grid; place-items: center; }
+.signout:hover { color: var(--text-body); background: var(--bg-sunken); }
+
+/* ===================== MAIN ===================== */
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.topbar {
+  height: 66px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 28px;
+  border-bottom: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: blur(8px); position: sticky; top: 0; z-index: 20;
+}
+.tt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tt .k { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tt h1 { font-size: 19px; font-weight: 600; letter-spacing: -0.02em; color: var(--text-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grow { flex: 1; }
+.search {
+  width: 240px; height: 38px; border-radius: 11px; background: var(--bg-sunken);
+  border: 1px solid var(--border); display: flex; align-items: center; gap: 9px; padding: 0 13px;
+  font-size: 13px; color: var(--text-faint);
+}
+.ibtn {
+  width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center;
+  color: var(--text-body); border: 1px solid var(--border); background: var(--surface-card);
+  transition: background var(--dur-fast), transform var(--dur-fast); position: relative;
+}
+.ibtn:hover { background: var(--bg-sunken); }
+.ibtn:active { transform: scale(0.94); }
+.ibtn .dot {
+  position: absolute; top: 8px; right: 8px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--miss-solid); border: 1.5px solid var(--surface-card);
+}
+
+.content { flex: 1; padding: 28px; }
+.wrap { max-width: 1180px; margin: 0 auto; }
+
+/* ===================== MOBILE ===================== */
+.hamburger { display: none; }
+.scrim2 { display: none; }
+
+@media (max-width: 900px) {
+  .side {
+    position: fixed; left: 0; top: 0; z-index: 60; height: 100dvh;
+    transform: translateX(-100%); transition: transform var(--dur-base) var(--ease-out);
+    box-shadow: var(--shadow-lg);
+  }
+  .side.open { transform: translateX(0); }
+  .scrim2 {
+    display: block; position: fixed; inset: 0; z-index: 55; background: rgba(9,9,11,0.45);
+    border: 0; opacity: 0; pointer-events: none; transition: opacity var(--dur-base);
+  }
+  .scrim2.open { opacity: 1; pointer-events: auto; }
+  .hamburger { display: grid; }
+  .search { display: none; }
+  .topbar { padding: 0 16px; }
+  .content { padding: 18px 16px; }
+}

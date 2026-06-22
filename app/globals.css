@@ -8,6 +8,11 @@
 @import "./styles/tokens-colors.css";
 @import "./styles/tokens-typography.css";
 @import "./styles/tokens-layout.css";
+/* Theme + accent override the semantic aliases above; must come after the token
+ * files (and after tokens-layout for the dark shadow overrides) and before the
+ * component/chrome layers that consume them. */
+@import "./styles/dark.css";
+@import "./styles/accent.css";
 @import "./styles/base.css";
 @import "./styles/components.css";
 @import "./styles/site.css";

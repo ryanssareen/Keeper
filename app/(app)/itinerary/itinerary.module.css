@@ -1,0 +1,22 @@
+.blank {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 80px 24px;
+  min-height: 300px;
+}
+.blank h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-strong);
+  letter-spacing: -0.02em;
+}
+.blank p {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-top: 8px;
+  max-width: 36ch;
+  line-height: 1.55;
+}

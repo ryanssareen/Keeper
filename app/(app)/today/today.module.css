@@ -1,0 +1,87 @@
+.page { padding: 28px 0 60px; max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+/* Alert banner */
+.alertBanner {
+  display: flex; align-items: center; gap: 10px; padding: 13px 18px; border-radius: 14px;
+  background: var(--risk-surface); border: 1px solid var(--risk-border); text-decoration: none;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.alertBanner:hover { background: var(--risk-border); }
+.alertDot { width: 8px; height: 8px; border-radius: 50%; background: var(--risk-solid); flex-shrink: 0; animation: blink 1.6s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0.25; } }
+.alertText { flex: 1; font-size: 14px; font-weight: 500; color: var(--risk-ink); }
+.alertCta { font-size: 13px; font-weight: 600; color: var(--risk-ink); opacity: 0.8; }
+
+/* Hero */
+.hero {
+  border-radius: 22px; border: 1px solid var(--border); background: var(--surface-card);
+  padding: 28px 30px 24px;
+}
+.hero_ok { border-color: var(--ok-border); background: var(--ok-surface); }
+.hero_risk { border-color: var(--risk-border); background: var(--risk-surface); }
+.hero_miss { border-color: var(--miss-border); background: var(--miss-surface); }
+.hero_neutral { border-color: var(--border); background: var(--surface-card); }
+
+.heroInner { margin-bottom: 20px; }
+.heroPill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--text-muted); margin-bottom: 10px;
+}
+.heroDot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok-solid); }
+.hero_risk .heroDot { background: var(--risk-solid); animation: blink 1.6s steps(1) infinite; }
+.hero_miss .heroDot { background: var(--miss-solid); animation: blink 1.6s steps(1) infinite; }
+
+.heroH { font-size: 34px; font-weight: 800; letter-spacing: -0.03em; color: var(--text-strong); line-height: 1.1; }
+.hero_ok .heroH { color: var(--ok-ink); }
+.hero_risk .heroH { color: var(--risk-ink); }
+.hero_miss .heroH { color: var(--miss-ink); }
+
+.heroSub { font-size: 14.5px; color: var(--text-body); margin-top: 8px; line-height: 1.5; max-width: 54ch; }
+.heroMeta { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+.heroFlight { font-family: var(--font-mono); font-size: 14px; font-weight: 700; color: var(--text-strong); }
+.heroDivider { color: var(--text-faint); }
+.heroPlace { font-size: 14px; color: var(--text-body); }
+
+.heroActions { display: flex; gap: 10px; flex-wrap: wrap; }
+.btnPrimary {
+  display: inline-flex; align-items: center; padding: 11px 22px; border-radius: 13px;
+  background: var(--accent); color: var(--text-on-ink); font-size: 14px; font-weight: 600;
+  letter-spacing: -0.01em; box-shadow: var(--shadow-sm); text-decoration: none;
+}
+.btnGhost {
+  display: inline-flex; align-items: center; padding: 11px 18px; border-radius: 13px;
+  background: transparent; border: 1px solid var(--border); color: var(--text-body);
+  font-size: 14px; font-weight: 500; text-decoration: none;
+}
+.btnGhost:hover { background: var(--bg-sunken); }
+
+/* Cards */
+.cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.card {
+  border: 1px solid var(--border); border-radius: 18px; background: var(--surface-card);
+  padding: 18px 20px; display: flex; flex-direction: column; gap: 8px;
+}
+.cardLink { text-decoration: none; transition: border-color var(--dur-fast) var(--ease-out); }
+.cardLink:hover { border-color: var(--border-strong); }
+.cardStat { font-size: 28px; font-weight: 800; letter-spacing: -0.03em; color: var(--text-strong); line-height: 1.1; }
+.cardDest { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; color: var(--text-strong); line-height: 1.2; }
+.cardSub { font-size: 12.5px; color: var(--text-muted); }
+
+.pbarTrack { height: 5px; background: var(--bg-sunken); border-radius: 99px; overflow: hidden; }
+.pbarFill { height: 100%; background: var(--ok-solid); border-radius: 99px; transition: width 0.3s; }
+
+.shareOn { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ok-ink); font-weight: 500; }
+.shareDot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok-solid); }
+.shareViewLink { font-size: 12.5px; color: var(--accent); text-decoration: none; }
+.shareViewLink:hover { text-decoration: underline; }
+.shareSetupLink { color: var(--accent); text-decoration: underline; }
+
+@media (max-width: 780px) {
+  .page { padding: 16px 0 40px; }
+  .cards { grid-template-columns: repeat(2, 1fr); }
+  .heroH { font-size: 26px; }
+}
+@media (max-width: 500px) {
+  .cards { grid-template-columns: 1fr; }
+}

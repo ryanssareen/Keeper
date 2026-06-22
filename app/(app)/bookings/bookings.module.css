@@ -1,0 +1,79 @@
+.page { padding: 28px 0 60px; max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+
+/* Cover */
+.cover {
+  position: relative; border-radius: 20px; overflow: hidden; min-height: 160px;
+  display: flex; align-items: flex-end; background: var(--surface-card); border: 1px solid var(--border);
+}
+.ph {
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--bg-sunken) 0px, var(--bg-sunken) 8px,
+    var(--bg-subtle) 8px, var(--bg-subtle) 16px
+  );
+  opacity: 0.55;
+}
+.coverText { position: relative; padding: 24px 28px; z-index: 1; }
+.chip {
+  display: inline-flex; align-items: center; background: var(--neutral-surface); color: var(--neutral-ink);
+  font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 6px; margin-bottom: 8px;
+}
+.coverText h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; color: var(--text-strong); line-height: 1.1; }
+.sub { font-size: 13.5px; color: var(--text-muted); margin-top: 5px; }
+
+/* Quick facts */
+.facts {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+  background: var(--hairline); border-radius: 16px; overflow: hidden; border: 1px solid var(--border);
+}
+.fact { background: var(--surface-card); padding: 16px 20px; }
+.fact dt { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); margin-bottom: 4px; }
+.fact dd { font-size: 16px; font-weight: 600; color: var(--text-strong); letter-spacing: -0.01em; }
+.progressLink { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
+.pbar { flex: 1; height: 4px; background: var(--bg-sunken); border-radius: 99px; overflow: hidden; min-width: 40px; }
+.pfill { height: 100%; background: var(--ok-solid); border-radius: 99px; transition: width 0.3s; }
+
+/* Two-column layout */
+.cols { display: grid; grid-template-columns: 1fr 320px; gap: 16px; align-items: start; }
+.main { display: flex; flex-direction: column; gap: 16px; }
+.side { display: flex; flex-direction: column; gap: 16px; }
+
+.cardTop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.bigVal { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; color: var(--text-strong); }
+.bigRow { display: flex; align-items: baseline; gap: 10px; }
+.bigValMuted { font-size: 18px; font-weight: 500; color: var(--text-muted); }
+.note { font-size: 12.5px; color: var(--text-faint); margin-top: 10px; }
+.delayOk { font-size: 13px; font-weight: 600; color: var(--ok-ink); }
+.delayBad { font-size: 13px; font-weight: 600; color: var(--risk-ink); }
+.metaGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-top: 14px; }
+.metaGrid div { padding: 8px 0; border-top: 1px solid var(--hairline); }
+.metaGrid dt { font-size: 11px; color: var(--text-faint); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.06em; }
+.metaGrid dd { font-size: 14px; font-weight: 500; color: var(--text-strong); margin-top: 2px; }
+
+/* Progress bar (side card) */
+.pbarWrap { display: flex; flex-direction: column; gap: 8px; }
+.pbarTrack { height: 6px; background: var(--bg-sunken); border-radius: 99px; overflow: hidden; }
+.pbarFill { height: 100%; background: var(--ok-solid); border-radius: 99px; transition: width 0.3s; }
+.pbarLabel { font-size: 12.5px; color: var(--text-muted); }
+
+/* Sharing */
+.shareOn { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+.shareDot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok-solid); flex-shrink: 0; }
+.shareLabel { flex: 1; font-size: 13.5px; color: var(--text-body); }
+.shareOff { font-size: 13.5px; color: var(--text-muted); line-height: 1.5; }
+.shareLink { color: var(--accent); text-decoration: underline; }
+
+.blank {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 80px 24px; min-height: 300px;
+}
+.blank h1 { font-size: 22px; font-weight: 700; color: var(--text-strong); letter-spacing: -0.02em; }
+.blank p { font-size: 14px; color: var(--text-muted); margin-top: 8px; max-width: 38ch; line-height: 1.55; }
+
+@media (max-width: 720px) {
+  .page { padding: 20px 0 40px; }
+  .cols { grid-template-columns: 1fr; }
+  .facts { grid-template-columns: 1fr; }
+}

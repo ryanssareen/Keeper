@@ -1,6 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import { connection } from "next/server";
+import { cookies } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
+import {
+  THEME_COOKIE,
+  ACCENT_COOKIE,
+  isTheme,
+  isAccent,
+} from "@/lib/preferences/preferences";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -40,9 +47,23 @@ export default async function RootLayout({
   // pages cannot be prerendered at build time (their inline scripts would carry no/stale nonce and be
   // blocked). `connection()` opts the whole tree into request-time rendering. See lib/security/headers.
   await connection();
+
+  // Theme + accent are read from cookies and stamped on <html> server-side, so the first paint is
+  // already in the user's chosen theme — no flash, and no inline bootstrap script to reconcile with the
+  // strict (nonce-only) CSP. The client toggle updates these attributes optimistically and persists via
+  // savePreferences (which rewrites the cookie). suppressHydrationWarning covers that optimistic write.
+  const jar = await cookies();
+  const themeCookie = jar.get(THEME_COOKIE)?.value;
+  const accentCookie = jar.get(ACCENT_COOKIE)?.value;
+  const theme = isTheme(themeCookie) ? themeCookie : "light";
+  const accent = isAccent(accentCookie) ? accentCookie : "emerald";
+
   return (
     <html
       lang="en"
+      data-theme={theme}
+      data-accent={accent}
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>

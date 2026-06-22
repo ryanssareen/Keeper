@@ -317,6 +317,68 @@ function toIso(value: unknown): string {
   return String(value);
 }
 
+/**
+ * One row in the account-scoped Alerts feed: a fired transition joined to its watch, across ALL of a
+ * user's watches (the cross-watch counterpart to the single-watch catchHistory). Render-ready
+ * camelCase; sentAt is null until the dispatcher settles the row to 'sent'. usefulLead is the
+ * engine's own lead-bearing flag (null for non-CATCH kinds), distinct from the owner's later
+ * "was this useful" self-report which lives on the calibration row.
+ */
+export interface AlertFeedEntry {
+  watchId: string;
+  flightNumber: string;
+  placeLabel: string;
+  kind: FiredKind;
+  transition: string;
+  leadTimeMinutes: number | null;
+  usefulLead: boolean | null;
+  deliveryStatus: DeliveryStatus;
+  sentAt: string | null;
+  createdAt: string;
+}
+
+/**
+ * Pure DB-boundary mapper for one Alerts-feed row. Coerces the untyped driver row from the
+ * ft -> watches join into the typed AlertFeedEntry, narrowing the two enum columns (kind,
+ * delivery_status) so a drifted value fails loud here rather than surfacing deep in the feed UI.
+ * Extracted (mirrors metrics' computeMetricsFromInput) so the mapping is unit-tested without a DB;
+ * loadAlertsForUser is the thin live path over it.
+ */
+export function mapAlertRow(r: Record<string, unknown>): AlertFeedEntry {
+  return {
+    watchId: String(r.watch_id),
+    flightNumber: String(r.flight_number),
+    placeLabel: String(r.place_label),
+    kind: narrow(r.kind, FIRED_KINDS, "fired_transitions.kind"),
+    transition: String(r.transition),
+    leadTimeMinutes: r.lead_time_minutes === null ? null : Number(r.lead_time_minutes),
+    usefulLead: r.useful_lead === null ? null : Boolean(r.useful_lead),
+    deliveryStatus: narrow(r.delivery_status, DELIVERY_STATUSES, "fired_transitions.delivery_status"),
+    sentAt: r.sent_at === null ? null : toIso(r.sent_at),
+    createdAt: toIso(r.created_at),
+  };
+}
+
+/**
+ * Account-scoped Alerts feed: every fired transition across a user's watches, newest first (cap 100).
+ * The cross-watch counterpart to loadWatchForView's per-watch catchHistory — ownership IS the gate
+ * (the WHERE w.user_id clause means a caller only ever sees their own firings). Thin IO over the pure
+ * mapAlertRow; not unit-tested (no DB in CI), exercised through the live feed.
+ */
+export async function loadAlertsForUser(userId: string): Promise<AlertFeedEntry[]> {
+  const sql = db();
+  const rows = await sql`
+    SELECT ft.kind, ft.transition, ft.lead_time_minutes, ft.useful_lead, ft.delivery_status,
+           ft.sent_at, ft.created_at,
+           w.id AS watch_id, w.flight_number, w.place_label
+    FROM fired_transitions ft
+    JOIN watches w ON w.id = ft.watch_id
+    WHERE w.user_id = ${userId}
+    ORDER BY ft.created_at DESC
+    LIMIT 100`;
+  return rows.map(mapAlertRow);
+}
+
 /** Transit-source values for the inline `"osrm" | "manual_buffer"` literal (no named type to reuse). */
 const TRANSIT_SOURCES = ["osrm", "manual_buffer"] as const;
 

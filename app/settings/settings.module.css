@@ -11,7 +11,7 @@
 
 .panel { padding-top: 26px; }
 
-.group { background: #fff; border: 1px solid var(--border); border-radius: 18px; overflow: hidden; margin-bottom: 20px; }
+.group { background: var(--surface-card); border: 1px solid var(--border); border-radius: 18px; overflow: hidden; margin-bottom: 20px; }
 .groupHead { padding: 18px 20px 0; }
 .groupHead h2 { font-size: 16px; letter-spacing: -0.01em; }
 .groupHead p { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
@@ -48,7 +48,31 @@
 .error { border-radius: var(--radius-lg); background: var(--miss-surface); border: 1px solid var(--miss-border); color: var(--red-700); font-size: 13px; padding: 9px 12px; }
 .notice { border-radius: var(--radius-lg); background: var(--ok-surface); border: 1px solid var(--ok-border); color: var(--emerald-700); font-size: 13px; padding: 9px 12px; }
 
+/* Appearance panel */
+.themeRow { display: flex; gap: 10px; }
+.themeBtn {
+  display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 12px;
+  border: 2px solid var(--border); background: var(--bg); font-size: 14px; font-weight: 500;
+  color: var(--text-body); cursor: pointer; transition: border-color var(--dur-fast) var(--ease-out);
+}
+.themeBtn:hover { border-color: var(--border-strong); }
+.themeBtnActive { border-color: var(--accent); color: var(--text-strong); }
+.themeSwatch { width: 28px; height: 20px; border-radius: 6px; border: 1px solid var(--border); }
+.swatchLight { background: #f4f4f5; }
+.swatchDark { background: #18181b; }
+
+.accentRow { display: flex; gap: 10px; flex-wrap: wrap; }
+.accentBtn {
+  display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 10px;
+  border: 2px solid var(--border); background: var(--bg); font-size: 13.5px; font-weight: 500;
+  color: var(--text-body); cursor: pointer; transition: border-color var(--dur-fast) var(--ease-out);
+}
+.accentBtn:hover { border-color: var(--border-strong); }
+.accentBtnActive { border-color: var(--accent); color: var(--text-strong); }
+.accentDot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+
 @media (max-width: 860px) {
   .two { grid-template-columns: 1fr; }
   .wrap { padding: 20px; }
+  .themeRow { flex-direction: column; }
 }

@@ -1,0 +1,51 @@
+/* Keeper — accent picker
+ * The accent recolors the "on track / success" state only (the OK token group),
+ * NOT the primary-action ink (--accent stays ink in light, light-on-dark in dark).
+ * Because every OK surface now reads --ok-surface/--ok-border/--ok-ink/--ok-solid
+ * (see components.css + base.css), an accent only has to redefine those four tokens
+ * per theme. Emerald is the default and lives in tokens-colors.css / dark.css, so it
+ * needs no block here. Imported AFTER dark.css; the [data-theme="dark"][data-accent]
+ * compound selectors outrank the plain [data-theme="dark"] dark defaults.
+ */
+
+/* ---- Teal ---- */
+[data-accent="teal"] {
+  --ok-surface: #f0fdfa;
+  --ok-border:  #99f6e4;
+  --ok-ink:     #0f766e;
+  --ok-solid:   #0d9488;
+}
+[data-theme="dark"][data-accent="teal"] {
+  --ok-surface: rgba(20, 184, 166, 0.13);
+  --ok-border:  rgba(20, 184, 166, 0.30);
+  --ok-ink:     #5eead4;
+  --ok-solid:   #14b8a6;
+}
+
+/* ---- Indigo ---- */
+[data-accent="indigo"] {
+  --ok-surface: #eef2ff;
+  --ok-border:  #c7d2fe;
+  --ok-ink:     #4338ca;
+  --ok-solid:   #4f46e5;
+}
+[data-theme="dark"][data-accent="indigo"] {
+  --ok-surface: rgba(99, 102, 241, 0.13);
+  --ok-border:  rgba(99, 102, 241, 0.30);
+  --ok-ink:     #a5b4fc;
+  --ok-solid:   #6366f1;
+}
+
+/* ---- Violet ---- */
+[data-accent="violet"] {
+  --ok-surface: #f5f3ff;
+  --ok-border:  #ddd6fe;
+  --ok-ink:     #6d28d9;
+  --ok-solid:   #7c3aed;
+}
+[data-theme="dark"][data-accent="violet"] {
+  --ok-surface: rgba(139, 92, 246, 0.13);
+  --ok-border:  rgba(139, 92, 246, 0.30);
+  --ok-ink:     #c4b5fd;
+  --ok-solid:   #8b5cf6;
+}

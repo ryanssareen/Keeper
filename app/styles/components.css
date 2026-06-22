@@ -56,16 +56,18 @@
 }
 .pill-dot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
-.pill-ok      { background: var(--emerald-50);  color: var(--emerald-700); }
-.pill-risk    { background: var(--amber-50);    color: var(--amber-600); }
-.pill-miss    { background: var(--red-50);      color: var(--red-600); }
-.pill-unsure  { background: var(--slate-100);   color: var(--slate-600); }
-.pill-neutral { background: var(--zinc-100);    color: var(--zinc-600); }
+/* Soft pills read the semantic state tokens so dark mode + the accent picker
+ * recolor them with no per-component edits. */
+.pill-ok      { background: var(--ok-surface);      color: var(--ok-ink); }
+.pill-risk    { background: var(--risk-surface);    color: var(--risk-ink); }
+.pill-miss    { background: var(--miss-surface);    color: var(--miss-ink); }
+.pill-unsure  { background: var(--unsure-surface);  color: var(--unsure-ink); }
+.pill-neutral { background: var(--neutral-surface); color: var(--neutral-ink); }
 
-.pill-solid-ok     { background: var(--emerald-600); color: #fff; }
-.pill-solid-risk   { background: var(--amber-500);   color: #fff; }
-.pill-solid-miss   { background: var(--red-600);     color: #fff; }
-.pill-solid-ink    { background: var(--zinc-900);    color: #fff; }
+.pill-solid-ok     { background: var(--ok-solid);    color: #fff; }
+.pill-solid-risk   { background: var(--risk-solid);  color: #fff; }
+.pill-solid-miss   { background: var(--miss-solid);  color: #fff; }
+.pill-solid-ink    { background: var(--surface-ink); color: var(--text-on-ink); }
 
 /* badge = squarer chip used for kinds/codes */
 .badge {
@@ -109,10 +111,10 @@
 
 /* ============================ State surface (hero) ============================ */
 .state-surface { border: 1px solid; border-radius: var(--radius-2xl); padding: var(--space-6); }
-.state-ok     { background: var(--ok-surface);     border-color: var(--ok-border);     color: var(--emerald-950); }
-.state-risk   { background: var(--risk-surface);   border-color: var(--risk-border);   color: var(--amber-900); }
-.state-miss   { background: var(--miss-surface);   border-color: var(--miss-border);   color: var(--red-950); }
-.state-unsure { background: var(--unsure-surface); border-color: var(--unsure-border); color: var(--slate-900); }
+.state-ok     { background: var(--ok-surface);     border-color: var(--ok-border);     color: var(--ok-ink); }
+.state-risk   { background: var(--risk-surface);   border-color: var(--risk-border);   color: var(--risk-ink); }
+.state-miss   { background: var(--miss-surface);   border-color: var(--miss-border);   color: var(--miss-ink); }
+.state-unsure { background: var(--unsure-surface); border-color: var(--unsure-border); color: var(--unsure-ink); }
 
 /* ============================ Misc ============================ */
 .divider { height: 1px; background: var(--hairline); border: 0; }

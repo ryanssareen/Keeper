@@ -92,4 +92,8 @@
   --unsure-border:  var(--slate-300);
   --unsure-ink:     var(--slate-600);
   --unsure-solid:   var(--slate-500);
+
+  /* ---- Neutral chip (codes / "kind" tags) ---- */
+  --neutral-surface: var(--zinc-100);
+  --neutral-ink:     var(--zinc-600);
 }

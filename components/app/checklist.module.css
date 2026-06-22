@@ -1,0 +1,50 @@
+.wrap { max-width: 680px; margin: 0 auto; padding: 28px 0 60px; display: flex; flex-direction: column; gap: 16px; }
+
+/* Progress */
+.progressCard {}
+.progressRow { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+.progressLabel { font-size: 15px; font-weight: 700; color: var(--text-strong); letter-spacing: -0.01em; }
+.progressCount { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); }
+.pbarTrack { height: 8px; background: var(--bg-sunken); border-radius: 99px; overflow: hidden; }
+.pbarFill { height: 100%; background: var(--ok-solid); border-radius: 99px; transition: width 0.35s var(--ease-out); }
+
+/* List */
+.listCard { overflow: hidden; }
+.list { list-style: none; margin: 0; padding: 0; }
+.item {
+  display: flex; align-items: center; gap: 12px; padding: 12px 18px;
+  border-bottom: 1px solid var(--hairline); transition: background var(--dur-fast) var(--ease-out);
+}
+.item:last-child { border-bottom: none; }
+.item:hover { background: var(--bg-subtle); }
+.item:hover .removeBtn { opacity: 1; }
+.done .itemLabel { text-decoration: line-through; color: var(--text-faint); }
+
+/* Checkbox */
+.ckbox {
+  width: 20px; height: 20px; flex-shrink: 0; border-radius: 6px; border: 2px solid var(--border-strong);
+  background: var(--bg); display: grid; place-items: center; cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+  color: #fff;
+}
+.ckbox:hover { border-color: var(--ok-solid); }
+.ckboxDone { background: var(--ok-solid); border-color: var(--ok-solid); }
+
+.itemLabel { flex: 1; font-size: 14.5px; color: var(--text-body); line-height: 1.4; }
+
+/* Remove button */
+.removeBtn {
+  opacity: 0; width: 28px; height: 28px; display: grid; place-items: center;
+  border-radius: 8px; color: var(--text-muted); transition: opacity var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+  flex-shrink: 0;
+}
+.removeBtn:hover { background: var(--miss-surface); color: var(--miss-ink); }
+
+/* Empty */
+.empty { padding: 32px 20px; text-align: center; }
+.empty p { font-size: 13.5px; color: var(--text-muted); }
+
+/* Add row */
+.addRow { display: flex; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--hairline); }
+.addInput { flex: 1; }
+.addBtn { flex-shrink: 0; }

@@ -1,13 +1,19 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { subscribePush } from "@/lib/push/client";
 import { signOut, updateProfile, updatePassword, type AuthState } from "@/lib/auth/actions";
+import { savePreferences } from "@/lib/preferences/actions";
+import {
+  THEMES, ACCENTS, type Theme, type Accent, type Preferences,
+  DEFAULT_PREFERENCES,
+} from "@/lib/preferences/preferences";
 import type { ShellUser } from "./AppShell";
 import s from "@/app/settings/settings.module.css";
 
-type Tab = "notifs" | "account" | "devices" | "advanced";
+type Tab = "appearance" | "notifs" | "account" | "devices" | "advanced";
 const TABS: { id: Tab; label: string }[] = [
+  { id: "appearance", label: "Appearance" },
   { id: "notifs", label: "Notifications" },
   { id: "account", label: "Account" },
   { id: "devices", label: "Devices" },
@@ -29,15 +35,22 @@ const Switch = ({ defaultChecked, disabled }: { defaultChecked?: boolean; disabl
   </label>
 );
 
-export function SettingsTabs({ user }: { user: ShellUser }): React.ReactElement {
-  const [tab, setTab] = useState<Tab>("notifs");
+export function SettingsTabs({
+  user,
+  initialPrefs,
+}: {
+  user: ShellUser;
+  initialPrefs?: Preferences;
+}): React.ReactElement {
+  const [tab, setTab] = useState<Tab>("appearance");
   const initial = (user.name || user.email || "K").trim().charAt(0).toUpperCase();
+  const prefs = initialPrefs ?? DEFAULT_PREFERENCES;
 
   return (
     <div className={s.wrap}>
       <div className={s.pageH}>
         <h1>Settings</h1>
-        <p>Manage how Keeper reaches you, your account, and installed devices.</p>
+        <p>Manage appearance, notifications, your account, and installed devices.</p>
       </div>
 
       <div className={s.tabs}>
@@ -48,11 +61,98 @@ export function SettingsTabs({ user }: { user: ShellUser }): React.ReactElement 
         ))}
       </div>
 
+      {tab === "appearance" ? <AppearancePanel initialTheme={prefs.theme} initialAccent={prefs.accent} /> : null}
       {tab === "notifs" ? <NotifsPanel /> : null}
       {tab === "account" ? <AccountPanel user={user} initial={initial} /> : null}
       {tab === "devices" ? <DevicesPanel /> : null}
       {tab === "advanced" ? <AdvancedPanel /> : null}
     </div>
+  );
+}
+
+/* ----------------------------------------------------------- appearance */
+
+const ACCENT_COLORS: Record<Accent, { label: string; hex: string }> = {
+  emerald: { label: "Emerald", hex: "#10b981" },
+  teal:    { label: "Teal",    hex: "#14b8a6" },
+  indigo:  { label: "Indigo",  hex: "#6366f1" },
+  violet:  { label: "Violet",  hex: "#8b5cf6" },
+};
+
+function AppearancePanel({
+  initialTheme,
+  initialAccent,
+}: {
+  initialTheme: Theme;
+  initialAccent: Accent;
+}): React.ReactElement {
+  const [theme, setTheme] = useState<Theme>(initialTheme);
+  const [accent, setAccent] = useState<Accent>(initialAccent);
+  const [, startTransition] = useTransition();
+  const [saved, setSaved] = useState(false);
+
+  function applyTheme(t: Theme) {
+    setTheme(t);
+    document.documentElement.setAttribute("data-theme", t);
+  }
+
+  function applyAccent(a: Accent) {
+    setAccent(a);
+    document.documentElement.setAttribute("data-accent", a);
+  }
+
+  function handleSave() {
+    setSaved(false);
+    startTransition(() => {
+      void savePreferences({ theme, accent }).then(() => setSaved(true));
+    });
+  }
+
+  return (
+    <section className={s.panel}>
+      <div className={s.group}>
+        <div className={s.groupHead}><h2>Theme</h2><p>Choose between light and dark.</p></div>
+        <div className={s.groupBody}>
+          <div className={s.themeRow}>
+            {THEMES.map((t) => (
+              <button
+                key={t}
+                className={`${s.themeBtn} ${theme === t ? s.themeBtnActive : ""}`}
+                onClick={() => applyTheme(t)}
+              >
+                <span className={`${s.themeSwatch} ${t === "dark" ? s.swatchDark : s.swatchLight}`} />
+                {t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className={s.group}>
+        <div className={s.groupHead}><h2>Accent colour</h2><p>Colours the OK/on-track state and interactive elements.</p></div>
+        <div className={s.groupBody}>
+          <div className={s.accentRow}>
+            {ACCENTS.map((a) => (
+              <button
+                key={a}
+                className={`${s.accentBtn} ${accent === a ? s.accentBtnActive : ""}`}
+                onClick={() => applyAccent(a)}
+                title={ACCENT_COLORS[a].label}
+              >
+                <span className={s.accentDot} style={{ background: ACCENT_COLORS[a].hex }} />
+                {ACCENT_COLORS[a].label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className={s.groupBody} style={{ paddingTop: 0 }}>
+        <button className="btn btn-primary" onClick={handleSave}>
+          {saved ? "Saved" : "Save preferences"}
+        </button>
+      </div>
+    </section>
   );
 }
 

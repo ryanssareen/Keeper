@@ -1,33 +1,15 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { loadAndVerifyWatch } from "@/lib/security/watchGate";
+import { buildWatchView, loadWatchForView } from "@/lib/calibration/dashboard";
 import { getCurrentUser } from "@/lib/supabase/server";
-import {
-  buildWatchView,
-  loadWatchForView,
-  loadWatchesForUser,
-} from "@/lib/calibration/dashboard";
-import { AppShell } from "@/components/app/AppShell";
-import { WatchList } from "@/components/app/WatchList";
 import { DashboardDetail } from "@/components/app/DashboardDetail";
-import { TripSummary } from "@/components/app/TripSummary";
 import { SelfReportForm, DashboardTokenFallback } from "@/components/SelfReportForm";
-import { loadOnboarding } from "@/lib/onboarding/queries";
-import s from "@/components/app/dashboard.module.css";
+import Link from "next/link";
 
 /**
- * The dashboard serves TWO independent audiences (R16, R22, R23):
- *
- *  1. CAPABILITY path (?id&token): a logged-out push deep-link to one watch. The shared watch gate
- *     verifies the token in constant time (uniform denial, no existence oracle); on success we render
- *     that single watch solo, with the interactive self-report (the token authorizes the POST).
- *
- *  2. ACCOUNT path (no id): a signed-in owner's multi-watch console. The session is the gate — we list
- *     only this user's watches (loadWatchesForUser is WHERE user_id), so any id it returns is already
- *     authorized. Selection is ?w=<id>, server-rendered per click.
- *
- * searchParams is awaited (Request-time API in Next 16) — reading it opts this page into dynamic
- * rendering, which is correct: it is per-watch / per-user and never cached.
+ * Two audiences:
+ *  1. Capability path (?id&token): logged-out push deep-link to a specific watch.
+ *  2. Account path: signed-in owner → redirect to the new command-center /today.
  */
 export default async function DashboardPage({
   searchParams,
@@ -62,92 +44,11 @@ export default async function DashboardPage({
     );
   }
 
-  // ---- Account path: signed-in owner's multi-watch console ----
+  // ---- Account path: redirect to the new command-center Today view ----
   const user = await getCurrentUser();
-  if (!user) redirect("/login?next=/dashboard");
-
-  const shellUser = {
-    name: typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : "",
-    email: user.email ?? "",
-  };
-
-  const watches = await loadWatchesForUser(user.id);
-
-  // No watches yet. If the user has finished onboarding, show the trip they set up — otherwise the
-  // flow dead-ends here (and the "arm a watch" CTA loops straight back to /onboarding).
-  if (watches.length === 0) {
-    const onboarding = await loadOnboarding();
-
-    // A brand-new account that has never touched onboarding (no row at all) should land IN onboarding,
-    // not on this empty "no trips" page. Right after signup this is the difference between being guided
-    // to set up a trip and being dropped on a dead-end. Once the wizard autosaves a step — or the user
-    // explicitly skips (which writes a marker row) — a row exists and we fall through to the CTA below,
-    // so this never loops.
-    if (!onboarding) redirect("/onboarding");
-
-    const trip = onboarding?.completed && onboarding.answers?.dest ? onboarding.answers : null;
-
-    if (trip) {
-      return (
-        <AppShell
-          user={shellUser}
-          railMiddle={<WatchList watches={[]} selectedId="" />}
-          header={<span>Trips</span>}
-          headerActions={
-            <>
-              <Link className="btn btn-secondary btn-sm" href="/onboarding">Edit trip</Link>
-              <Link className="btn btn-primary btn-sm" href="/trips">Open trip</Link>
-            </>
-          }
-        >
-          <TripSummary answers={trip} />
-        </AppShell>
-      );
-    }
-
-    return (
-      <AppShell user={shellUser} railMiddle={<WatchList watches={[]} selectedId="" />} header={<span>Trips</span>}>
-        <div className={s.blank}>
-          <div className={s.blankRing}>
-            <svg width="26" height="26" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="1.6" fill="#18181b" /><path d="M8 4.2a3.8 3.8 0 0 1 3.8 3.8" stroke="#18181b" strokeWidth="1.3" strokeLinecap="round" /><path d="M8 1.7a6.3 6.3 0 0 1 6.3 6.3" stroke="#a1a1aa" strokeWidth="1.3" strokeLinecap="round" /></svg>
-          </div>
-          <h1>No trips yet</h1>
-          <p>Set up your first trip and Keeper will keep every booking, document, and plan in one calm place.</p>
-          <Link className={`btn btn-primary btn-lg ${s.cta}`} href="/onboarding">Set up your trip</Link>
-        </div>
-      </AppShell>
-    );
-  }
-
-  // Pick the selected watch from ?w, else the first (active sorts first).
-  const requested = typeof params.w === "string" ? params.w : undefined;
-  const selected = watches.find((w) => w.id === requested) ?? watches[0];
-
-  const loaded = await loadWatchForView(selected.id);
-  const view =
-    loaded.status === "ok"
-      ? buildWatchView(loaded.watch, loaded.snapshots, loaded.firedRows, loaded.calibration)
-      : null;
-
-  return (
-    <AppShell
-      user={shellUser}
-      railMiddle={<WatchList watches={watches} selectedId={selected.id} />}
-      header={
-        <>
-          <span>Trips</span>
-          <span className={s.sep}>/</span>
-          <b>{selected.flightNumber} → {selected.placeLabel}</b>
-        </>
-      }
-      headerActions={<Link className="btn btn-secondary btn-sm" href="/onboarding">New watch</Link>}
-    >
-      {view ? <DashboardDetail view={view} /> : <div className={s.empty}>This watch could not be loaded.</div>}
-    </AppShell>
-  );
+  if (!user) redirect("/login?next=/today");
+  redirect("/today");
 }
-
-/* -------------------------------------------------------------------- gate */
 
 function Gate({
   kind,
@@ -164,7 +65,7 @@ function Gate({
       <p className="mt-2 max-w-sm text-sm leading-relaxed text-zinc-500">
         {kind === "missing"
           ? "This page needs a watch link with a valid access token, or a signed-in account. Open it from your arm confirmation, or log in."
-          : "We couldn’t verify access to this watch. The link may be wrong, expired, or for a watch you don’t own."}
+          : "We couldn't verify access to this watch. The link may be wrong, expired, or for a watch you don't own."}
       </p>
       <Link href="/login" className="btn btn-primary" style={{ marginTop: 20 }}>Log in</Link>
     </main>

@@ -1,0 +1,67 @@
+/* Keeper — dark theme
+ * Opt-in via [data-theme="dark"] on <html> (set from the user's saved preference,
+ * see lib/preferences). Light is the default, so every existing screen is untouched
+ * until the attribute is present. Overrides are SEMANTIC only — the raw zinc/state
+ * ramps are not redefined; surfaces, text, borders and the four state token groups
+ * flip to dark-appropriate values so any component reading --ok-surface / --text-strong
+ * / --border / etc. adapts automatically. Must be imported AFTER tokens-colors.css and
+ * tokens-layout.css so it can override their semantic aliases and shadows.
+ */
+[data-theme="dark"] {
+  /* ---- Surfaces ---- */
+  --bg:            #0a0a0b;
+  --bg-subtle:     #101012;
+  --bg-sunken:     #161618;
+  --surface-card:  #161618;
+  --surface-ink:   var(--zinc-50);
+
+  /* ---- Text ---- */
+  --text-strong:   #fafafa;
+  --text-body:     #d4d4d8;
+  --text-muted:    #a1a1aa;
+  --text-faint:    #71717a;
+  --text-on-ink:   #18181b;   /* ink action becomes light → its label goes dark */
+
+  /* ---- Lines ---- */
+  --border:        rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.17);
+  --hairline:      rgba(255, 255, 255, 0.07);
+
+  /* ---- Primary action: light-on-dark ---- */
+  --accent:        #fafafa;
+  --accent-hover:  #e4e4e7;
+
+  /* ---- State surfaces: translucent tints over the dark canvas ---- */
+  --ok-surface:    rgba(16, 185, 129, 0.13);
+  --ok-border:     rgba(16, 185, 129, 0.30);
+  --ok-ink:        #6ee7b7;
+  --ok-solid:      var(--emerald-500);
+
+  --risk-surface:  rgba(245, 158, 11, 0.14);
+  --risk-border:   rgba(245, 158, 11, 0.32);
+  --risk-ink:      #fcd34d;
+  --risk-solid:    var(--amber-500);
+
+  --miss-surface:  rgba(239, 68, 68, 0.14);
+  --miss-border:   rgba(239, 68, 68, 0.32);
+  --miss-ink:      #fca5a5;
+  --miss-solid:    var(--red-500);
+
+  --unsure-surface: rgba(148, 163, 184, 0.15);
+  --unsure-border:  rgba(148, 163, 184, 0.30);
+  --unsure-ink:     #cbd5e1;
+  --unsure-solid:   var(--slate-400);
+
+  /* ---- Neutral chip ---- */
+  --neutral-surface: rgba(255, 255, 255, 0.08);
+  --neutral-ink:     var(--zinc-300);
+
+  /* ---- Shadows: deeper, since hairlines carry less weight on dark ---- */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px -4px rgba(0, 0, 0, 0.55), 0 2px 6px -2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 40px -8px rgba(0, 0, 0, 0.6), 0 4px 12px -4px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="dark"] ::selection { background: var(--zinc-200); color: #09090b; }
+[data-theme="dark"] :focus-visible { outline-color: var(--zinc-200); }

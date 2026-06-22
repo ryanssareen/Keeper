@@ -28,7 +28,15 @@ const RATE_LIMITED_PATHS = ["/api/watch", "/api/self-report", "/api/push/subscri
  * it serves two audiences (a logged-in owner AND a logged-out push deep-link carrying ?id&token), so
  * its access decision lives in the page, not the proxy.
  */
-const PROTECTED_PREFIXES = ["/onboarding", "/settings"];
+const PROTECTED_PREFIXES = [
+  "/onboarding",
+  "/settings",
+  "/today",
+  "/itinerary",
+  "/bookings",
+  "/alerts",
+  "/checklist",
+];
 
 function isProtected(pathname: string): boolean {
   return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
