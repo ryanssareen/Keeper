@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { ChecklistItem } from "@/lib/checklist/checklist";
+import { DEFAULT_CHECKLIST, type ChecklistItem } from "@/lib/checklist/checklist";
 
 /**
  * Server-only checklist reads. Directiveless (NOT "use server") so a Server Component calls it as a
@@ -55,5 +55,38 @@ export async function loadChecklist(): Promise<ChecklistItem[]> {
     // Not configured / table missing — degrade to an empty list rather than crashing the view.
     console.error(`[checklist] load threw: ${e instanceof Error ? e.message : String(e)}`);
     return [];
+  }
+}
+
+/**
+ * Load the checklist, seeding the DEFAULT_CHECKLIST the first time it's empty. RENDER-SAFE: unlike the
+ * seedChecklist server action this does NOT call revalidatePath (which throws when invoked during
+ * render — calling the action from a Server Component body 500s the page). A Server Component calls
+ * this directly. Best-effort: any failure degrades to whatever already loaded rather than throwing.
+ */
+export async function loadChecklistSeeded(): Promise<ChecklistItem[]> {
+  const items = await loadChecklist();
+  if (items.length > 0) return items;
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return items;
+
+    const rows = DEFAULT_CHECKLIST.map((label, idx) => ({
+      user_id: user.id,
+      label,
+      sort_order: idx,
+    }));
+    const { error } = await supabase.from("checklist_items").insert(rows);
+    if (error) {
+      console.error("[checklist] seed-on-load failed:", error.message);
+      return items;
+    }
+    return await loadChecklist();
+  } catch (e) {
+    console.error(`[checklist] seed-on-load threw: ${e instanceof Error ? e.message : String(e)}`);
+    return items;
   }
 }
