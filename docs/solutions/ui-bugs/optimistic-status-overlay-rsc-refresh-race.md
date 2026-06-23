@@ -22,7 +22,7 @@ tags: [optimistic-ui, rsc, router-refresh, server-actions, react-19, async-timin
 
 ## Problem
 
-On `/trips/itinerary` (Next.js 16 App Router), toggling an itinerary item's completion status showed the ✓ tick for a few seconds, then it vanished and the item appeared to revert to un-done — non-deterministically. The tick was rendered **purely from server-fetched data** (`it.status === "completed"`) with no client state holding the user's intended value.
+On the itinerary view (`/itinerary`, served by `app/(app)/itinerary/page.tsx`; the older `/trips/itinerary` route now just redirects here) on Next.js 16 App Router, toggling an itinerary item's completion status showed the ✓ tick for a few seconds, then it vanished and the item appeared to revert to un-done — non-deterministically. The tick was rendered **purely from server-fetched data** (`it.status === "completed"`) with no client state holding the user's intended value.
 
 ## Symptoms
 
@@ -35,7 +35,7 @@ On `/trips/itinerary` (Next.js 16 App Router), toggling an itinerary item's comp
 Relying on **`server action → revalidatePath → router.refresh()` alone** to reflect a mutation is a timing race when there is no client state holding the new value:
 
 1. Click → `setItemStatus(id, next)` fires (async round-trip).
-2. The server action writes the row and calls `revalidatePath("/trips/itinerary")`.
+2. The server action writes the row and calls `revalidatePath("/trips/itinerary")` (still the legacy path the view now redirects from — it does not invalidate `/itinerary`, which makes the optimistic overlay below the load-bearing fix, not the revalidation).
 3. The client calls `router.refresh()` to pull fresh server data.
 4. **The race:** between the revalidation and the refreshed Server Component tree settling, the App Router can re-render the page with the **still-cached, pre-mutation** props. During that window `it.status` is still `"planned"`, so the tick disappears.
 5. When the refetch lands, `"completed"` renders — but the user has already seen the flash-and-revert.
