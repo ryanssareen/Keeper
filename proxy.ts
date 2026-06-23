@@ -43,6 +43,15 @@ function isProtected(pathname: string): boolean {
 }
 
 /**
+ * Pre-auth entry points a SIGNED-IN user has no reason to see: the marketing landing page and the
+ * login/signup forms. Opening any of them while authenticated should bounce to the app instead of
+ * showing the logged-out marketing surface (which still renders "Log in" / "Start watching" CTAs).
+ * Exact-match only — never a prefix — so we never swallow sub-paths (e.g. /login/help) or the other
+ * marketing sections (/features, /contact) that a logged-in user may legitimately want to revisit.
+ */
+const LOGGED_OUT_ONLY = new Set(["/", "/login", "/signup"]);
+
+/**
  * Pure Origin allowlist check for a mutating request. A same-origin browser sends `Origin` equal to
  * the request's own origin; we accept that. We also accept an explicitly allow-listed origin
  * (NEXT_PUBLIC_SITE_ORIGIN, if set) to support a known deployed front-end. A request with NO Origin
@@ -138,6 +147,18 @@ export async function proxy(req: NextRequest): Promise<NextResponse> {
 
   // 4) Refresh the Supabase session (rotates auth cookies onto `response`). No-ops without env.
   const { response, user } = await refreshSession(req, requestHeaders);
+
+  // 4.5) The protected-route gate in reverse: a signed-in user who lands on the marketing page or an
+  // auth form (e.g. by reopening the site in a new tab, or following an old bookmark) is sent straight
+  // to their dashboard. Without this, the landing page renders its logged-out CTAs even with a live
+  // session. /today then forwards to /onboarding if the trip isn't set up yet, so this always lands the
+  // user on the right "home". Only GET/HEAD navigations are redirected — never a form POST.
+  if (user && (method === "GET" || method === "HEAD") && LOGGED_OUT_ONLY.has(pathname)) {
+    const dest = req.nextUrl.clone();
+    dest.pathname = "/today";
+    dest.search = "";
+    return withSecurityHeaders(NextResponse.redirect(dest));
+  }
 
   // 5) Gate the post-auth app routes — bounce unauthenticated users to login, preserving intent.
   if (isProtected(pathname) && !user) {
