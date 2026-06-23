@@ -60,3 +60,47 @@ describe("proxy CSP nonce (hydration guard)", () => {
     expect(reqNonce).toBe(resNonce);
   });
 });
+
+describe("proxy logged-in redirect off the marketing/auth pages", () => {
+  // refreshSession is the seam that resolves the session. Reset it to the logged-OUT default before
+  // each test (mockImplementation persists past clearAllMocks), then opt into signed-in per test.
+  const setUser = async (user: { id: string } | null) => {
+    const { refreshSession } = await import("@/lib/supabase/middleware");
+    vi.mocked(refreshSession).mockImplementation(async (_req: unknown, requestHeaders: Headers) => ({
+      response: NextResponse.next({ request: { headers: requestHeaders } }),
+      user: user as never, // minimal shape — the proxy only checks truthiness
+    }));
+  };
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await setUser(null);
+  });
+
+  it("redirects a signed-in GET of the landing page to /today", async () => {
+    await setUser({ id: "u-1" });
+    const res = await proxy(get("/"));
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toMatch(/\/today$/);
+  });
+
+  it("redirects signed-in /login and /signup to /today too", async () => {
+    await setUser({ id: "u-1" });
+    for (const path of ["/login", "/signup"]) {
+      const res = await proxy(get(path));
+      expect(res.status).toBe(307);
+      expect(res.headers.get("location")).toMatch(/\/today$/);
+    }
+  });
+
+  it("leaves OTHER marketing pages alone for a signed-in user (no redirect loop on /features)", async () => {
+    await setUser({ id: "u-1" });
+    const res = await proxy(get("/features"));
+    // Passed through (NextResponse.next), not a 3xx to /today — so there is no Location header.
+    expect(res.headers.get("location")).toBeNull();
+  });
+
+  it("does NOT redirect a logged-OUT visitor off the landing page (marketing stays public)", async () => {
+    const res = await proxy(get("/"));
+    expect(res.headers.get("location")).toBeNull();
+  });
+});
